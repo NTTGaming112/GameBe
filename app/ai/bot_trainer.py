@@ -2,6 +2,7 @@
 import numpy as np
 from collections import defaultdict
 import random
+from app.database import get_games_collection, get_move_history_collection
 
 class AtaxxEnvironment:
     def __init__(self, board, current_player):
@@ -164,10 +165,18 @@ class MCTS:
         best_child = max(self.root.children, key=lambda c: c.visits)
         return best_child.move
 
-move_history = defaultdict(lambda: defaultdict(int))
-
 def train_mcts(games_data):
-    global move_history
+    games_collection = get_games_collection()
+    move_history_collection = get_move_history_collection()
+    move_history = defaultdict(lambda: defaultdict(int))
+
+    # Load move_history từ MongoDB (nếu có)
+    history_data = move_history_collection.find_one() or {"data": {}}
+    for state_key, moves in history_data.get("data", {}).items():
+        for move_key, score in moves.items():
+            move_history[state_key][move_key] = score
+
+    # Huấn luyện với dữ liệu mới
     for game in games_data:
         winner = game["winner"]
         for i, board_state in enumerate(game["board_states"]):
@@ -181,6 +190,19 @@ def train_mcts(games_data):
             elif winner == "draw":
                 move_history[state_key][move_key] += 0.5
 
+    # Lưu move_history vào MongoDB
+    move_history_collection.delete_many({})
+    move_history_collection.insert_one({"data": {k: dict(v) for k, v in move_history.items()}})
+
 def get_trained_move(board, current_player):
+    move_history_collection = get_move_history_collection()
+    move_history = defaultdict(lambda: defaultdict(int))
+
+    # Load move_history từ MongoDB
+    history_data = move_history_collection.find_one() or {"data": {}}
+    for state_key, moves in history_data.get("data", {}).items():
+        for move_key, score in moves.items():
+            move_history[state_key][move_key] = score
+
     mcts = MCTS(board, current_player, move_history=move_history)
     return mcts.search()

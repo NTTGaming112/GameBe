@@ -1,14 +1,14 @@
 # backend/app/routes/game.py
 from fastapi import APIRouter, HTTPException
 from app.models.game import Game, GameCreate
-from app.database import get_db
+from app.database import get_games_collection
 from app.ai.bot_trainer import train_mcts, get_trained_move
 
 router = APIRouter()
 
 @router.post("/games/")
 async def save_game(game: GameCreate):
-    db = get_db()
+    db = get_games_collection()
     game_dict = game.dict()
     db.insert_one(game_dict)
     games = list(db.find())
