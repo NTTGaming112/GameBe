@@ -1,4 +1,3 @@
-# backend/app/routes/game.py
 from fastapi import APIRouter, HTTPException
 from app.models.game import Game, GameCreate
 from app.database import get_games_collection
@@ -25,3 +24,9 @@ async def get_bot_move(request: dict):
     if not move:
         raise HTTPException(status_code=404, detail="No valid move found")
     return move
+
+@router.get("/games/")
+async def get_games():
+    db = get_games_collection()
+    games = list(db.find({}, {"_id": 0}))
+    return games

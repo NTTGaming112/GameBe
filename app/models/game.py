@@ -1,4 +1,3 @@
-# backend/app/models/game.py
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from datetime import datetime
