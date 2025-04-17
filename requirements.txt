@@ -2,3 +2,4 @@ flask
 numpy
 pymongo
 gunicorn
+python-dotenv

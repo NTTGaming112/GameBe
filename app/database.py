@@ -1,10 +1,14 @@
 import os
 from pymongo import MongoClient
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def get_mongo_client():
-    uri = os.getenv("MONGODB_URI")
+    uri = os.getenv("MONGO_URI")
+
     if not uri:
-        raise ValueError("MONGODB_URI not set in environment variables")
+        raise ValueError("MONGO_URI not set in environment variables")
     return MongoClient(uri)
 
 def get_games_collection():
