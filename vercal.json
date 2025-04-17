@@ -11,5 +11,8 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ]
+  ],
+  "env": {
+    "MONGO_URI": "mongodb+srv://NTTGaming:admin123@ataxx.5w1pgph.mongodb.net/?retryWrites=true&w=majority&appName=ataxx"
+  }
 }

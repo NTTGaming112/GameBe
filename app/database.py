@@ -1,18 +1,18 @@
-from pymongo import MongoClient
-from dotenv import load_dotenv
 import os
+from pymongo import MongoClient
 
-load_dotenv()
-
-MONGO_URI = os.getenv("MONGO_URI")
-
-client = MongoClient(MONGO_URI)
-db = client["ataxx"]
-games_collection = db["games"]
-move_history_collection = db["move_history"]
+def get_mongo_client():
+    uri = os.getenv("MONGODB_URI")
+    if not uri:
+        raise ValueError("MONGODB_URI not set in environment variables")
+    return MongoClient(uri)
 
 def get_games_collection():
-    return games_collection
+    client = get_mongo_client()
+    db = client["ataxx_db"]
+    return db["games"]
 
 def get_move_history_collection():
-    return move_history_collection
+    client = get_mongo_client()
+    db = client["ataxx_db"]
+    return db["move_history"]
