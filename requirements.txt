@@ -1,4 +1,5 @@
 fastapi
 uvicorn
+mangum
 pymongo
 python-dotenv
