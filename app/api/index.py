@@ -1,4 +1,26 @@
-from app.main import app
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.routes import router as game_router
+from dotenv import load_dotenv
 from mangum import Mangum
 
+load_dotenv()
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(game_router)
+
+@app.get("/")
+async def root():
+    return {"message": "Ataxx Backend API"}
+
+# 👇 Handler dùng cho Vercel
 handler = Mangum(app)
