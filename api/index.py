@@ -1,12 +1,13 @@
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from app.models.game import Game, GameCreate
 from app.database import get_games_collection
 from app.ai.bot_trainer import train_mcts, get_trained_move
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = Flask(__name__)
+
+# Cấu hình CORS
+CORS(app, origins=["*"])  # Cho phép tất cả các domain truy cập
 
 @app.route("/")
 def hello_world():
