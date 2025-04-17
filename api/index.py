@@ -6,8 +6,8 @@ from app.ai.bot_trainer import train_mcts, get_trained_move
 
 app = Flask(__name__)
 
-# Cấu hình CORS
-CORS(app, origins=["*"])  # Cho phép tất cả các domain truy cập
+# Cấu hình CORS cho tất cả các phương thức và tất cả các domain
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route("/")
 def hello_world():
