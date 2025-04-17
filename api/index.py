@@ -1,26 +1,43 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router as game_router
-from dotenv import load_dotenv
-from mangum import Mangum
+from flask import Flask, jsonify, request
+from app.models.game import Game, GameCreate
+from app.database import get_games_collection
+from app.ai.bot_trainer import train_mcts, get_trained_move
 
-load_dotenv()
+app = Flask(__name__)
 
-app = FastAPI()
+@app.route("/")
+def hello_world():
+    return jsonify(message="Ataxx Backend API")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@app.route("/games/", methods=["POST"])
+def save_game():
+    game = request.get_json()
+    if not game:
+        return jsonify(message="Game data is missing"), 400
+    db = get_games_collection()
+    game_dict = game
+    db.insert_one(game_dict)
+    games = list(db.find())
+    train_mcts(games)
+    return jsonify(message="Game saved and bot trained"), 200
 
-app.include_router(game_router)
+@app.route("/bot-move/", methods=["POST"])
+def get_bot_move():
+    request_data = request.get_json()
+    board = request_data.get("board")
+    current_player = request_data.get("current_player")
+    if not board or not current_player:
+        return jsonify(message="Board and current_player are required"), 400
+    move = get_trained_move(board, current_player)
+    if not move:
+        return jsonify(message="No valid move found"), 404
+    return jsonify(move)
 
-@app.get("/")
-async def root():
-    return {"message": "Ataxx Backend API"}
+@app.route("/games/", methods=["GET"])
+def get_games():
+    db = get_games_collection()
+    games = list(db.find({}, {"_id": 0}))
+    return jsonify(games)
 
-# 👇 Handler dùng cho Vercel
-handler = Mangum(app)
+if __name__ == "__main__":
+    app.run(debug=True)
