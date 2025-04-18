@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request
 from werkzeug.exceptions import BadRequest, NotFound
 
-from app.ai.bot_trainer import get_trained_move, train_mcts
+from app.ai.bot_trainer import get_trained_move
+from app.ai.mcts.train import train_mcts
 from app.database import get_db, get_games_collection
 from app.models.game import GameCreate
 from pydantic import ValidationError
