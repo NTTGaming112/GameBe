@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from flask_cors import CORS
 
 app = Flask(__name__)
-cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+cors = CORS(app)
 
 @app.route("/")
 async def hello_world():
