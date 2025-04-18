@@ -5,9 +5,10 @@ from app.ai.bot_trainer import get_trained_move, train_mcts
 from app.database import get_db, get_games_collection
 from app.models.game import GameCreate
 from pydantic import ValidationError
+from flask_cors import CORS
 
 app = Flask(__name__)
-
+cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 @app.route("/")
 async def hello_world():
