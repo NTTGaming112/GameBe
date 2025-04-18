@@ -34,7 +34,6 @@ async def get_bot_move():
 
     return jsonify(move)
 
-
 @app.route("/save_game", methods=["POST"])
 def save_game():
    games_collection = get_games_collection()
@@ -52,5 +51,5 @@ def save_game():
 def train_mcts_route():
     data = request.get_json()
     weight_decay = data.get("weight_decay", 0.9)
-    train_mcts(weight_decay=weight_decay)
+    train_mcts()
     return jsonify({"message": "MCTS training completed"}), 200
