@@ -46,3 +46,10 @@ def save_game():
        return jsonify({"error": e.errors()}), 400
    except Exception as e:
        return jsonify({"error": str(e)}), 500
+   
+@app.route("/train_mcts", methods=["POST"])
+def train_mcts_route():
+    data = request.get_json()
+    weight_decay = data.get("weight_decay", 0.9)
+    train_mcts(weight_decay=weight_decay)
+    return jsonify({"message": "MCTS training completed"}), 200
