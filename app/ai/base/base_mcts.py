@@ -1,51 +1,56 @@
-class MCTSNode:
-    def __init__(self, state, parent=None):
-        self.state = state
-        self.parent = parent
-        self.children = []
-        self.visits = 0
-        self.wins = 0
+from app.ai.ataxx_env import AtaxxEnvironment
+from typing import Dict, Any
 
-    def is_fully_expanded(self):
-        return len(self.children) == len(self.state.get_valid_moves())
+class Node:
+    def __init__(self, move: Dict[str, Any] = None, parent=None):
+        self.move = move
+        self.parent = parent
+        self.children: list = []
+        self.visits = 0
+        self.value = 0.0  # Tổng giá trị (dùng cho Backpropagation)
+        self.wins = 0  # Số lần thắng (dùng cho UCT Winrate)
 
 class BaseMCTS:
-    def __init__(self, board, current_player, rollout_fn, reward_fn, selection_fn):
-        self.env = board.clone()
-        self.bot_player = current_player
+    def __init__(self, board, current_player, rollout_fn, reward_fn, select_fn):
+        self.env = AtaxxEnvironment(board, current_player)
+        self.player = current_player
         self.rollout_fn = rollout_fn
         self.reward_fn = reward_fn
-        self.selection_fn = selection_fn
+        self.select_fn = select_fn  # Hàm selection (uct_select_winrate hoặc uct_select_fractional)
+        self.root = Node()
 
-    def run(self, simulations=100):
-        root = MCTSNode(self.env.clone())
+    def run(self, simulations: int):
         for _ in range(simulations):
-            node = self.select(root)
-            if not node.state.is_game_over():
-                self.expand(node)
-                result_env = self.rollout_fn(node.state.clone(), self.bot_player)
-                reward = self.reward_fn(result_env, self.bot_player)
-                self.backpropagate(node, reward)
-        return self.best_move(root)
+            node = self.root
+            env = self.env.clone()
 
-    def select(self, node):
-        while node.children:
-            node = self.selection_fn(node)
-        return node
+            # Selection
+            while node.children:
+                node = self.select_fn(node)  # Dùng hàm selection được truyền vào
+                env.make_move(node.move["from"], node.move["to"])
 
-    def expand(self, node):
-        for move in node.state.get_valid_moves():
-            new_env = node.state.clone()
-            new_env.make_move(move["from"], move["to"])
-            child = MCTSNode(new_env, parent=node)
-            node.children.append(child)
+            # Expansion
+            if node.visits > 0:
+                moves = env.get_valid_moves()
+                for move in moves:
+                    child = Node(move=move, parent=node)
+                    node.children.append(child)
+                if node.children:
+                    node = node.children[0]
+                    env.make_move(node.move["from"], node.move["to"])
 
-    def backpropagate(self, node, reward):
-        while node:
-            node.visits += 1
-            node.wins += reward
-            node = node.parent
+            # Simulation
+            final_env = self.rollout_fn(env, self.player)
 
-    def best_move(self, root):
-        best_child = max(root.children, key=lambda c: c.visits)
-        return best_child.state.last_move
+            # Backpropagation
+            reward = self.reward_fn(final_env, self.player)
+            while node:
+                node.visits += 1
+                node.value += reward  # Tích lũy giá trị (fractional hoặc binary)
+                if self.reward_fn.__name__ == "binary_reward" and reward > 0.5:  # Nếu dùng binary reward
+                    node.wins += 1
+                node = node.parent
+
+        # Chọn nước đi tốt nhất
+        best_child = max(self.root.children, key=lambda c: c.visits, default=None)
+        return best_child.move if best_child else None

@@ -5,11 +5,11 @@ from app.ai.variants.random_bot import RandomBot
 from app.ai.variants.full_minimax import FullMinimax
 
 from app.database import get_move_history_collection
-from backend.app.ai.variants.mcts_binary import MCTSBinary
-from backend.app.ai.variants.mcts_binary_dk import MCTSBinaryDK
-from backend.app.ai.variants.mcts_fractional import MCTSFractional
-from backend.app.ai.variants.mcts_fractional_dk import MCTSFractionalDK
-from backend.app.ai.variants.mcts_minimax import MCTSMinimax
+from app.ai.variants.mcts_binary import MCTSBinary
+from app.ai.variants.mcts_binary_dk import MCTSBinaryDK
+from app.ai.variants.mcts_fractional import MCTSFractional
+from app.ai.variants.mcts_fractional_dk import MCTSFractionalDK
+from app.ai.variants.mcts_minimax import MCTSMinimax
 
 def get_trained_move(board: List[List[str]], current_player: str, iterations: int = 300, algorithm: str = "mcts") -> Dict[str, Any]:
     env = AtaxxEnvironment(board, current_player)
