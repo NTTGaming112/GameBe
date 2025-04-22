@@ -1,120 +1,141 @@
-from typing import List, Dict, Optional, Tuple
-
-BOARD_SIZE = 7
-MAX_MOVE_DISTANCE = 2
-NEIGHBOR_OFFSETS = [
-    (-1, -1), (-1, 0), (-1, 1),
-    (0, -1),           (0, 1),
-    (1, -1),  (1, 0),  (1, 1)
-]
+from typing import List, Dict, Any
+import copy
 
 class AtaxxEnvironment:
     def __init__(self, board: List[List[str]], current_player: str):
         self.board = board
         self.current_player = current_player
-        self.size = len(board)
-        self._valid_moves_cache: Optional[List[Dict[str, Dict[str, int]]]] = None
-        self._game_over_cache: Optional[bool] = None
+        self.board_size = 7
+        self.max_move_distance = 2
+        self.neighbor_offsets = [
+            (-1, -1), (-1, 0), (-1, 1),
+            (0, -1), (0, 1),
+            (1, -1), (1, 0), (1, 1)
+        ]
+        self.last_move = None
+        self.valid_moves_cache = {}  # Cache nước đi hợp lệ: {player: moves}
 
-    def get_state(self) -> Tuple[Tuple[str, ...], ...]:
-        return tuple(tuple(row) for row in self.board)
-
-    def get_valid_moves(self) -> List[Dict[str, Dict[str, int]]]:
-        if self._valid_moves_cache is not None:
-            return self._valid_moves_cache
-
-        moves = []
-        for row in range(self.size):
-            for col in range(self.size):
-                if self.board[row][col] != self.current_player:
-                    continue
-                # Chỉ kiểm tra các ô trong khoảng cách MAX_MOVE_DISTANCE
-                min_row = max(0, row - MAX_MOVE_DISTANCE)
-                max_row = min(self.size - 1, row + MAX_MOVE_DISTANCE) + 1
-                min_col = max(0, col - MAX_MOVE_DISTANCE)
-                max_col = min(self.size - 1, col + MAX_MOVE_DISTANCE) + 1
-
-                for r in range(min_row, max_row):
-                    for c in range(min_col, max_col):
-                        to_pos = {"row": r, "col": c}
-                        if self.is_valid_move({"row": row, "col": col}, to_pos):
-                            moves.append({"from": {"row": row, "col": col}, "to": to_pos})
-
-        self._valid_moves_cache = moves
-        return moves
+    def is_valid_position(self, row: int, col: int) -> bool:
+        return 0 <= row < self.board_size and 0 <= col < self.board_size
 
     def is_valid_move(self, from_pos: Dict[str, int], to_pos: Dict[str, int]) -> bool:
         from_row, from_col = from_pos["row"], from_pos["col"]
         to_row, to_col = to_pos["row"], to_pos["col"]
 
-        if (self.board[from_row][from_col] != self.current_player or 
-            self.board[to_row][to_col] != "empty"):
+        if (self.board[from_row][from_col] != self.current_player or
+                self.board[to_row][to_col] != "empty"):
             return False
 
-        row_diff = abs(to_row - from_row)
-        col_diff = abs(to_col - from_col)
-        return row_diff <= MAX_MOVE_DISTANCE and col_diff <= MAX_MOVE_DISTANCE
+        row_diff = abs(from_row - to_row)
+        col_diff = abs(from_col - to_col)
+        if row_diff > self.max_move_distance or col_diff > self.max_move_distance:
+            return False
 
-    def count_captured_pieces(self, to_pos: Dict[str, int]) -> int:
+        return self.is_valid_position(to_row, to_col)
+
+    def get_valid_moves(self) -> List[Dict[str, Any]]:
+        # Kiểm tra cache
+        if self.current_player in self.valid_moves_cache:
+            return self.valid_moves_cache[self.current_player]
+
+        valid_moves = []
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                if self.board[row][col] == self.current_player:
+                    from_pos = {"row": row, "col": col}
+                    for dr in range(-self.max_move_distance, self.max_move_distance + 1):
+                        for dc in range(-self.max_move_distance, self.max_move_distance + 1):
+                            if dr == 0 and dc == 0:
+                                continue
+                            to_row, to_col = row + dr, col + dc
+                            to_pos = {"row": to_row, "col": to_col}
+                            if self.is_valid_move(from_pos, to_pos):
+                                valid_moves.append({"from": from_pos, "to": to_pos})
+        
+        # Lưu vào cache
+        self.valid_moves_cache[self.current_player] = valid_moves
+        return valid_moves
+
+    def has_valid_moves(self, player: str) -> bool:
+        original_player = self.current_player
+        self.current_player = player
+        valid_moves = self.get_valid_moves()
+        self.current_player = original_player
+        return len(valid_moves) > 0
+
+    def capture_neighbors(self, to_pos: Dict[str, int]) -> None:
         to_row, to_col = to_pos["row"], to_pos["col"]
-        captured = 0
-        for dr, dc in NEIGHBOR_OFFSETS:
-            r, c = to_row + dr, to_col + dc
-            if (0 <= r < self.size and 0 <= c < self.size and 
-                self.board[r][c] not in ["empty", "block", self.current_player]):
-                captured += 1
-        return captured
+        opponent = "red" if self.current_player == "yellow" else "yellow"
+        for dr, dc in self.neighbor_offsets:
+            nr, nc = to_row + dr, to_col + dc
+            if (self.is_valid_position(nr, nc) and self.board[nr][nc] == opponent):
+                self.board[nr][nc] = self.current_player
 
     def make_move(self, from_pos: Dict[str, int], to_pos: Dict[str, int]) -> None:
         from_row, from_col = from_pos["row"], from_pos["col"]
         to_row, to_col = to_pos["row"], to_pos["col"]
 
-        new_board = [row[:] for row in self.board]
-        row_diff = abs(to_row - from_row)
-        col_diff = abs(to_col - from_col)
+        row_diff = abs(from_row - to_row)
+        col_diff = abs(from_col - to_col)
+
         if row_diff <= 1 and col_diff <= 1:
-            new_board[to_row][to_col] = self.current_player
+            self.board[to_row][to_col] = self.current_player
         else:
-            new_board[to_row][to_col] = self.current_player
-            new_board[from_row][from_col] = "empty"
+            self.board[from_row][from_col] = "empty"
+            self.board[to_row][to_col] = self.current_player
 
-        for dr, dc in NEIGHBOR_OFFSETS:
-            r, c = to_row + dr, to_col + dc
-            if (0 <= r < self.size and 0 <= c < self.size and 
-                new_board[r][c] not in ["empty", "block", self.current_player]):
-                new_board[r][c] = self.current_player
-
-        self.board = new_board
-        self.current_player = "red" if self.current_player == "yellow" else "yellow"
-        self._valid_moves_cache = None
-        self._game_over_cache = None
+        self.capture_neighbors(to_pos)
+        self.last_move = {"from": from_pos, "to": to_pos}
+        # Xóa cache sau khi thực hiện nước đi
+        self.valid_moves_cache.clear()
 
     def calculate_scores(self) -> Dict[str, int]:
-        yellow_score = sum(row.count("yellow") for row in self.board)
-        red_score = sum(row.count("red") for row in self.board)
+        yellow_score = 0
+        red_score = 0
+        for row in self.board:
+            for cell in row:
+                if cell == "yellow":
+                    yellow_score += 1
+                elif cell == "red":
+                    red_score += 1
         return {"yellowScore": yellow_score, "redScore": red_score}
 
+    def is_board_full(self) -> bool:
+        return all(cell != "empty" for row in self.board for cell in row)
+
     def is_game_over(self) -> bool:
-        if self._game_over_cache is not None:
-            return self._game_over_cache
-
-        moves = self.get_valid_moves()
-        if not moves:
-            self.current_player = "red" if self.current_player == "yellow" else "yellow"
-            moves = self.get_valid_moves()
-            self.current_player = "red" if self.current_player == "yellow" else "yellow"
-            result = len(moves) == 0
-            self._game_over_cache = result
-            return result
-        self._game_over_cache = False
-        return False
-
-    def get_reward(self, bot_player: str) -> float:
-        if not self.is_game_over():
-            return 0
         scores = self.calculate_scores()
-        if scores["yellowScore"] > scores["redScore"]:
-            return 1 if bot_player == "yellow" else -1
-        elif scores["redScore"] > scores["yellowScore"]:
-            return 1 if bot_player == "red" else -1
-        return 0
+        return (scores["yellowScore"] == 0 or scores["redScore"] == 0 or
+                self.is_board_full() or
+                (not self.has_valid_moves("yellow") and not self.has_valid_moves("red")))
+
+    def clone(self):
+        cloned_board = [row[:] for row in self.board]
+        cloned_env = AtaxxEnvironment(cloned_board, self.current_player)
+        cloned_env.last_move = copy.deepcopy(self.last_move)
+        return cloned_env
+
+    def estimate_move_value(self, move: Dict[str, Any], player: str) -> float:
+        clone = self.clone()
+        original_player = clone.current_player
+        clone.current_player = player
+        clone.make_move(move["from"], move["to"])
+        scores = clone.calculate_scores()
+        
+        score_diff = (scores["yellowScore"] - scores["redScore"] if player == "yellow"
+                      else scores["redScore"] - scores["yellowScore"])
+        
+        captures = 0
+        to_row, to_col = move["to"]["row"], move["to"]["col"]
+        for dr, dc in self.neighbor_offsets:
+            nr, nc = to_row + dr, to_col + dc
+            if (self.is_valid_position(nr, nc) and
+                    self.board[nr][nc] in ["yellow", "red"] and
+                    self.board[nr][nc] != player):
+                captures += 1
+        
+        center = self.board_size // 2
+        distance_to_center = abs(to_row - center) + abs(to_col - center)
+        center_bonus = (self.board_size - distance_to_center) * 0.05
+        
+        return score_diff + captures * 0.1 + center_bonus
