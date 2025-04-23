@@ -28,6 +28,9 @@ def play_bot_vs_bot_api():
 
         if not isinstance(initial_board, list) or not all(isinstance(row, list) for row in initial_board):
             raise BadRequest("Board must be a 2D list")
+        
+        if len(initial_board) != 7 or any(len(row) != 7 for row in initial_board):
+            raise BadRequest("Board must be 7x7")
 
         yellow_config = data.get("yellow", {"algorithm": "mcts-binary", "iterations": 300})
         red_config = data.get("red", {"algorithm": "mcts-binary", "iterations": 300})

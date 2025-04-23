@@ -47,16 +47,16 @@ def play_bot_vs_bot(
     board = [row[:] for row in initial_board]
     current_player = "yellow"
 
-    # # Tải move history từ MongoDB (nếu có)
-    # move_history_collection = get_move_history_collection()
-    # move_history = defaultdict(lambda: defaultdict(float))
-    # try:
-    #     history_data = move_history_collection.find_one() or {"data": {}}
-    #     for state_key, moves in history_data.get("data", {}).items():
-    #         for move_key, score in moves.items():
-    #             move_history[state_key][move_key] = score
-    # except Exception as e:
-    #     return {"error": f"Error loading move history from MongoDB: {e}"}
+    # Tải move history từ MongoDB (nếu có)
+    move_history_collection = get_move_history_collection()
+    move_history = defaultdict(lambda: defaultdict(float))
+    try:
+        history_data = move_history_collection.find_one() or {"data": {}}
+        for state_key, moves in history_data.get("data", {}).items():
+            for move_key, score in moves.items():
+                move_history[state_key][move_key] = score
+    except Exception as e:
+        return {"error": f"Error loading move history from MongoDB: {e}"}
 
     moves_history = []
     max_moves = 500  # Giới hạn số nước đi tối đa để tránh vòng lặp vô hạn
