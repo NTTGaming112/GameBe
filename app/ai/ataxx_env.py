@@ -119,7 +119,6 @@ class AtaxxEnvironment:
         # Xóa cache sau khi thực hiện nước đi
         self._valid_moves_cache = None
         self.capture_neighbors(to_row, to_col)
-        # print(f"Move made from {from_pos} to {to_pos} by {self.current_player}")
 
     def capture_neighbors(self, row: int, col: int) -> None:
         neighbor_offsets = [
