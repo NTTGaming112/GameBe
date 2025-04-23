@@ -38,9 +38,9 @@ def get_minimax_move(board: List[List[str]], current_player: str, depth: int = 2
 def play_bot_vs_bot(
     initial_board: List[List[str]] = None,
     yellow_algorithm: str = "mcts-binary",
-    yellow_iterations: int = 50,  # Giảm từ 300 xuống 50
+    yellow_iterations: int = 50, 
     red_algorithm: str = "mcts-binary",
-    red_iterations: int = 50  # Giảm từ 300 xuống 50
+    red_iterations: int = 50  
 ) -> Dict[str, Any]:
     try:
         env = AtaxxEnvironment(initial_board, "yellow")
@@ -49,7 +49,7 @@ def play_bot_vs_bot(
 
     current_player = "yellow"
     moves_history = []
-    max_moves = 50
+    max_moves = 20
 
     try:
         for move_count in range(max_moves):
