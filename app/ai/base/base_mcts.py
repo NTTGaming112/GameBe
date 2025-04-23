@@ -40,7 +40,7 @@ class BaseMCTS:
                     env.make_move(node.move["from"], node.move["to"])
 
             # Simulation
-            final_env = self.rollout_fn(env, self.player)
+            final_env = self.rollout_fn(env, self.player, max_depth=50)  # Truyền max_depth
 
             # Backpropagation
             reward = self.reward_fn(final_env, self.player)
