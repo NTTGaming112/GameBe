@@ -26,17 +26,18 @@ def heuristic_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 50) -
             best_score = float('-inf')
             center_row, center_col = 3, 3  # Trung tâm của bàn cờ 7x7
             
+            # Clone một lần duy nhất trước vòng lặp
             scores = current_env.calculate_scores()
             for move in moves:
+                temp_env = current_env.clone()
                 to_row, to_col = move["to"]["row"], move["to"]["col"]
                 # Tính khoảng cách đến trung tâm
                 distance_to_center = abs(to_row - center_row) + abs(to_col - center_col)
                 # Ước lượng số ô có thể chiếm
-                temp_env = current_env.clone()
                 temp_env.make_move(move["from"], move["to"])
                 new_scores = temp_env.calculate_scores()
                 score_gain = (new_scores["yellowScore"] if current_player == "yellow" else new_scores["redScore"]) - \
-                            (scores["yellowScore"] if current_player == "yellow" else scores["redScore"])
+                             (scores["yellowScore"] if current_player == "yellow" else scores["redScore"])
                 # Kết hợp khoảng cách và số ô chiếm được
                 heuristic_score = score_gain - distance_to_center * 0.5
                 

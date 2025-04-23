@@ -5,6 +5,7 @@ class AtaxxEnvironment:
     def __init__(self, board: List[List[str]], current_player: str):
         self.board_size = 7
         self.max_move_distance = 2
+        self._valid_moves_cache = None  # Cache cho get_valid_moves()
 
         if not self._is_valid_board(board):
             raise ValueError("Invalid board: Must be a 7x7 2D list with valid values ('yellow', 'red', 'empty', 'block')")
@@ -62,19 +63,32 @@ class AtaxxEnvironment:
             return False
 
     def get_valid_moves(self) -> List[Dict[str, Any]]:
+        # Nếu cache tồn tại và hợp lệ, trả về cache
+        if self._valid_moves_cache is not None:
+            return self._valid_moves_cache
+
         moves = []
+        # Duyệt các ô có quân của người chơi hiện tại
         for from_row in range(self.board_size):
             for from_col in range(self.board_size):
                 if self.board[from_row][from_col] != self.current_player:
                     continue
-                for to_row in range(self.board_size):
-                    for to_col in range(self.board_size):
+                # Chỉ kiểm tra các ô đích trong phạm vi max_move_distance
+                for dr in range(-self.max_move_distance, self.max_move_distance + 1):
+                    for dc in range(-self.max_move_distance, self.max_move_distance + 1):
+                        to_row = from_row + dr
+                        to_col = from_col + dc
+                        if not self.is_valid_position(to_row, to_col):
+                            continue
                         move = {
                             "from": {"row": from_row, "col": from_col},
                             "to": {"row": to_row, "col": to_col}
                         }
                         if self.is_valid_move(move["from"], move["to"]):
                             moves.append(move)
+
+        # Lưu vào cache
+        self._valid_moves_cache = moves
         return moves
 
     def has_valid_moves(self, player: str) -> bool:
@@ -102,7 +116,10 @@ class AtaxxEnvironment:
             self.board[from_row][from_col] = "empty"
             self.board[to_row][to_col] = self.current_player
 
+        # Xóa cache sau khi thực hiện nước đi
+        self._valid_moves_cache = None
         self.capture_neighbors(to_row, to_col)
+        print(f"Move made from {from_pos} to {to_pos} by {self.current_player}")
 
     def capture_neighbors(self, row: int, col: int) -> None:
         neighbor_offsets = [

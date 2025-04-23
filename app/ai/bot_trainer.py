@@ -8,9 +8,8 @@ from app.ai.variants.mcts_fractional import MCTSFractional
 from app.ai.variants.mcts_fractional_dk import MCTSFractionalDK
 from app.ai.variants.mcts_minimax import MCTSMinimax
 
-def get_trained_move(board: List[List[str]], current_player: str, iterations: int = 300, algorithm: str = "mcts") -> Dict[str, Any]:
+def get_trained_move(board: List[List[str]], current_player: str, iterations: int = 50, algorithm: str = "mcts") -> Dict[str, Any]:
     try:
-        # Khởi tạo class MCTS tương ứng
         if algorithm == "mcts-binary":
             mcts = MCTSBinary(board, current_player)
         elif algorithm == "mcts-binary-dk":
@@ -22,7 +21,6 @@ def get_trained_move(board: List[List[str]], current_player: str, iterations: in
         elif algorithm == "mcts-minimax":
             mcts = MCTSMinimax(board, current_player)
         else:
-            # Mặc định: mcts-binary
             mcts = MCTSBinary(board, current_player)
 
         return mcts.run(simulations=iterations)
@@ -40,9 +38,9 @@ def get_minimax_move(board: List[List[str]], current_player: str, depth: int = 2
 def play_bot_vs_bot(
     initial_board: List[List[str]] = None,
     yellow_algorithm: str = "mcts-binary",
-    yellow_iterations: int = 300,
+    yellow_iterations: int = 50,  # Giảm từ 300 xuống 50
     red_algorithm: str = "mcts-binary",
-    red_iterations: int = 300
+    red_iterations: int = 50  # Giảm từ 300 xuống 50
 ) -> Dict[str, Any]:
     try:
         env = AtaxxEnvironment(initial_board, "yellow")
@@ -51,7 +49,7 @@ def play_bot_vs_bot(
 
     current_player = "yellow"
     moves_history = []
-    max_moves = 500
+    max_moves = 50
 
     try:
         for move_count in range(max_moves):
