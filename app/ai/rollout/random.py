@@ -1,7 +1,7 @@
 from app.ai.ataxx_env import AtaxxEnvironment
 import random
 
-def random_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 50) -> AtaxxEnvironment:
+def random_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 10) -> AtaxxEnvironment:
     try:
         current_env = env.clone()
         current_player = player

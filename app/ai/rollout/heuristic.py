@@ -1,7 +1,7 @@
 from app.ai.ataxx_env import AtaxxEnvironment
 from typing import Dict, Any
 
-def heuristic_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 50) -> AtaxxEnvironment:
+def heuristic_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 10) -> AtaxxEnvironment:
     try:
         current_env = env.clone()
         current_player = player

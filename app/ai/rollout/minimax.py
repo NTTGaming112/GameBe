@@ -2,7 +2,7 @@ from app.ai.ataxx_env import AtaxxEnvironment
 from app.ai.variants.full_minimax import FullMinimax
 from typing import Dict, Any
 
-def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2, max_depth: int = 50) -> AtaxxEnvironment:
+def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2, max_depth: int = 10) -> AtaxxEnvironment:
     try:
         current_env = env.clone()
         current_player = player
