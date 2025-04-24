@@ -47,8 +47,6 @@ def play_bot_vs_bot_api():
         if not isinstance(red_config["iterations"], int) or red_config["iterations"] < 1:
             raise BadRequest("Red iterations must be a positive integer")
 
-        print("Starting bot vs bot game..."),
-
         # Gọi hàm play_bot_vs_bot với logic mới
         result = play_bot_vs_bot(
             initial_board=initial_board,
@@ -68,7 +66,7 @@ def play_bot_vs_bot_api():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@app.route("/bot_move", methods=["POST"])
+@app.route("/bot_move/", methods=["POST"])
 def bot_move():
     try:
         data = request.get_json()

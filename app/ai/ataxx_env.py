@@ -6,6 +6,11 @@ class AtaxxEnvironment:
         self.board_size = 7
         self.max_move_distance = 2
         self._valid_moves_cache = None  # Cache cho get_valid_moves()
+        self.neighbor_offsets = [
+            (-1, -1), (-1, 0), (-1, 1),
+            (0, -1), (0, 1),
+            (1, -1), (1, 0), (1, 1)
+        ]
 
         if not self._is_valid_board(board):
             raise ValueError("Invalid board: Must be a 7x7 2D list with valid values ('yellow', 'red', 'empty', 'block')")
@@ -121,12 +126,7 @@ class AtaxxEnvironment:
         self.capture_neighbors(to_row, to_col)
 
     def capture_neighbors(self, row: int, col: int) -> None:
-        neighbor_offsets = [
-            (-1, -1), (-1, 0), (-1, 1),
-            (0, -1), (0, 1),
-            (1, -1), (1, 0), (1, 1)
-        ]
-        for dr, dc in neighbor_offsets:
+        for dr, dc in self.neighbor_offsets:
             nr, nc = row + dr, col + dc
             if (self.is_valid_position(nr, nc) and
                 self.board[nr][nc] not in ["empty", "block", self.current_player]):
