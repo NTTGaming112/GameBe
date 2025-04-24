@@ -71,7 +71,7 @@ class AtaxxEnvironment:
         # Nếu cache tồn tại và hợp lệ, trả về cache
         if self._valid_moves_cache is not None:
             return self._valid_moves_cache
-
+        
         moves = []
         # Duyệt các ô có quân của người chơi hiện tại
         for from_row in range(self.board_size):
@@ -97,10 +97,7 @@ class AtaxxEnvironment:
         return moves
 
     def has_valid_moves(self, player: str) -> bool:
-        original_player = self.current_player
-        self.current_player = player
         valid_moves = self.get_valid_moves()
-        self.current_player = original_player
         return len(valid_moves) > 0
 
     def make_move(self, from_pos: Dict[str, int], to_pos: Dict[str, int]) -> None:

@@ -44,12 +44,16 @@ def get_bot_move(
     try:
         env = AtaxxEnvironment(initial_board, current_player)
         if algorithm.startswith("mcts"):
-            return get_trained_move(env.board, current_player, iterations, algorithm)
+            move = get_trained_move(env.board, current_player, iterations, algorithm)
         elif algorithm == "minimax":
-            return get_minimax_move(env.board, current_player, depth=iterations)
+            move = get_minimax_move(env.board, current_player, depth=iterations)
         else:
             bot = RandomBot(env)
-            return bot.run()
+            move = bot.run()
+        
+        result = {"current_player": current_player, "move": move}
+        return result
+    
     except Exception as e:
         raise Exception(f"Error in get_bot_move: {str(e)}")
 
