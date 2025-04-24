@@ -77,8 +77,6 @@ def bot_move():
         current_player = data.get("current_player")
         algorithm = data.get("algorithm", "mcts-binary")
         iterations = data.get("iterations", 50)
-        print(*board, sep="\n")
-        print(current_player)
 
         if not board or not current_player:
             raise BadRequest("Board and current player are required")
