@@ -1,14 +1,5 @@
 import math
-from typing import List, Dict, Any
-
-class Node:
-    def __init__(self, move: Dict[str, Any] = None, parent=None):
-        self.move = move
-        self.parent = parent
-        self.children: List[Node] = []
-        self.visits = 0
-        self.value = 0.0  # Tổng giá trị (dùng cho Backpropagation)
-        self.wins = 0  # Không dùng trong UCT Fractional, nhưng giữ để tương thích
+from app.ai.base.base_mcts import Node
 
 def uct_select_fractional(node: Node, exploration_constant: float = 0.7) -> Node:
     """

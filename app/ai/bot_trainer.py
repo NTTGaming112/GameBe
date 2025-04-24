@@ -34,6 +34,24 @@ def get_minimax_move(board: List[List[str]], current_player: str, depth: int = 2
         return minimax.run()
     except Exception as e:
         raise Exception(f"Error in get_minimax_move: {str(e)}")
+    
+def get_bot_move(
+    initial_board: List[List[str]], 
+    current_player: str, 
+    algorithm: str = "mcts-binary", 
+    iterations: int = 50
+) -> Dict[str, Any]:
+    try:
+        env = AtaxxEnvironment(initial_board, current_player)
+        if algorithm.startswith("mcts"):
+            return get_trained_move(env.board, current_player, iterations, algorithm)
+        elif algorithm == "minimax":
+            return get_minimax_move(env.board, current_player, depth=iterations)
+        else:
+            bot = RandomBot(env)
+            return bot.run()
+    except Exception as e:
+        raise Exception(f"Error in get_bot_move: {str(e)}")
 
 def play_bot_vs_bot(
     initial_board: List[List[str]] = None,

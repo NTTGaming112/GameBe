@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 from werkzeug.exceptions import BadRequest, NotFound
 from typing import List, Dict, Any
 
-from app.ai.bot_trainer import play_bot_vs_bot
+from app.ai.bot_trainer import play_bot_vs_bot, get_bot_move
 from app.database import get_games_collection
 from app.models.game import GameCreate
 from pydantic import ValidationError
@@ -31,7 +31,7 @@ def play_bot_vs_bot_api():
 
         yellow_config = data.get("yellow", {"algorithm": "mcts-binary", "iterations": 300})
         red_config = data.get("red", {"algorithm": "mcts-binary", "iterations": 300})
-        
+
         # Kiểm tra cấu hình của Yellow và Red
         valid_algorithms = [
             "random", "minimax",
@@ -47,6 +47,8 @@ def play_bot_vs_bot_api():
         if not isinstance(red_config["iterations"], int) or red_config["iterations"] < 1:
             raise BadRequest("Red iterations must be a positive integer")
 
+        print("Starting bot vs bot game..."),
+
         # Gọi hàm play_bot_vs_bot với logic mới
         result = play_bot_vs_bot(
             initial_board=initial_board,
@@ -54,6 +56,42 @@ def play_bot_vs_bot_api():
             yellow_iterations=yellow_config["iterations"],
             red_algorithm=red_config["algorithm"],
             red_iterations=red_config["iterations"],
+        )
+
+        if "error" in result:
+            raise BadRequest(result["error"])
+
+        return jsonify(result), 200
+
+    except BadRequest as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/bot_move", methods=["POST"])
+def bot_move():
+    try:
+        data = request.get_json()
+        if not data:
+            raise BadRequest("Missing JSON body")
+
+        board = data.get("board")
+        current_player = data.get("current_player")
+        algorithm = data.get("algorithm", "mcts-binary")
+        iterations = data.get("iterations", 50)
+
+        if not board or not current_player:
+            raise BadRequest("Board and current player are required")
+
+        if not isinstance(board, list) or not all(isinstance(row, list) for row in board):
+            raise BadRequest("Board must be a 2D list")
+
+        # Gọi hàm get_trained_move với logic mới
+        result = get_bot_move(
+            initial_board=board,
+            current_player=current_player,
+            algorithm=algorithm,
+            iterations=iterations
         )
 
         if "error" in result:
