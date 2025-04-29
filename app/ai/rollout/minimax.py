@@ -1,7 +1,7 @@
 from app.ai.ataxx_env import AtaxxEnvironment
 from app.ai.variants.full_minimax import FullMinimax
 
-def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2, max_depth: int = 50) -> AtaxxEnvironment:
+def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2) -> AtaxxEnvironment:
     """
     Thực hiện mô phỏng sử dụng thuật toán Minimax từ trạng thái hiện tại đến khi trò chơi kết thúc
     hoặc đạt độ sâu tối đa.
@@ -10,7 +10,6 @@ def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2, max_dept
         env: Môi trường Ataxx hiện tại.
         player: Người chơi hiện tại ('yellow' hoặc 'red').
         depth: Độ sâu của Minimax (mặc định 2).
-        max_depth: Số nước đi tối đa trong mô phỏng (mặc định 50).
     
     Returns:
         AtaxxEnvironment: Trạng thái bàn cờ cuối cùng sau mô phỏng.
@@ -25,14 +24,12 @@ def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2, max_dept
         raise ValueError("Invalid player: must be 'yellow' or 'red'")
     if depth < 1:
         raise ValueError("Depth must be at least 1")
-    if max_depth < 1:
-        raise ValueError("Max depth must be at least 1")
     
     try:
         current_env = env.clone()  # Sao chép môi trường
         rollout_depth = 0
         
-        while not current_env.is_game_over() and rollout_depth < max_depth:
+        while not current_env.is_game_over():
             moves = current_env.get_valid_moves()
             if not moves:
                 # Nếu không có nước đi, chuyển lượt

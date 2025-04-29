@@ -1,6 +1,6 @@
 from app.ai.ataxx_env import AtaxxEnvironment
 
-def heuristic_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 50) -> AtaxxEnvironment:
+def heuristic_rollout(env: AtaxxEnvironment, player: str) -> AtaxxEnvironment:
     """
     Mô phỏng game với heuristic nâng cao từ domain knowledge trong paper Ataxx.
     """
@@ -8,8 +8,6 @@ def heuristic_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 50) -
         raise ValueError("Invalid environment: must be AtaxxEnvironment")
     if player not in {"yellow", "red"}:
         raise ValueError("Invalid player: must be 'yellow' or 'red'")
-    if max_depth < 1:
-        raise ValueError("Max depth must be at least 1")
 
     def neighbors(r, c):
         return [(r + dr, c + dc)
@@ -24,7 +22,7 @@ def heuristic_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 50) -
         current_env = env.clone()
         depth = 0
 
-        while not current_env.is_game_over() and depth < max_depth:
+        while not current_env.is_game_over():
             moves = current_env.get_valid_moves()
             if not moves:
                 current_env.current_player = "red" if current_env.current_player == "yellow" else "yellow"

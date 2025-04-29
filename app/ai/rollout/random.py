@@ -8,7 +8,6 @@ def random_rollout(env: AtaxxEnvironment, player: str) -> AtaxxEnvironment:
     Args:
         env: Môi trường Ataxx hiện tại.
         player: Người chơi hiện tại ('yellow' hoặc 'red').
-        max_depth: Số nước đi tối đa trong mô phỏng (mặc định 50).
     
     Returns:
         AtaxxEnvironment: Trạng thái bàn cờ cuối cùng sau mô phỏng.
