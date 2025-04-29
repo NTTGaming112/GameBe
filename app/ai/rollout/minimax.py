@@ -1,139 +1,111 @@
 from app.ai.ataxx_env import AtaxxEnvironment
 
-def sort_moves(moves, env):
-    """Sắp xếp nước đi ưu tiên nhảy xa và chiếm quân."""
-    def move_priority(move):
-        distance = abs(move['from'][0] - move['to'][0]) + abs(move['from'][1] - move['to'][1])
-        captured = 0
-        for di, dj in [(-1,0), (1,0), (0,-1), (0,1), (-1,-1), (-1,1), (1,-1), (1,1)]:
-            ni, nj = move['to'][0] + di, move['to'][1] + dj
-            if 0 <= ni < len(env.board) and 0 <= nj < len(env.board):
-                if env.board[ni][nj] == ('red' if env.current_player == 'yellow' else 'yellow'):
-                    captured += 1
-        return (-distance, -captured)
-    return sorted(moves, key=move_priority)
-
-def evaluate_board(env: AtaxxEnvironment, player: str) -> int:
-    """Đánh giá bàn cờ dựa trên nhiều yếu tố để tối ưu hóa lợi thế."""
-    try:
-        yellow_score = sum(row.count('yellow') for row in env.board)
-        red_score = sum(row.count('red') for row in env.board)
-        piece_diff = yellow_score - red_score
-
-        env_clone = env.clone()
-        env_clone.current_player = 'yellow'
-        yellow_moves = len(env_clone.get_valid_moves())
-        env_clone.current_player = 'red'
-        red_moves = len(env_clone.get_valid_moves())
-        move_diff = yellow_moves - red_moves
-
-        center_positions = [(2,2), (2,3), (2,4), (3,2), (3,3), (3,4), (4,2), (4,3), (4,4)]
-        yellow_center = sum(1 for pos in center_positions if env.board[pos[0]][pos[1]] == 'yellow')
-        red_center = sum(1 for pos in center_positions if env.board[pos[0]][pos[1]] == 'red')
-        center_diff = yellow_center - red_center
-
-        def count_neighbors(board, color):
-            count = 0
-            for i in range(len(board)):
-                for j in range(len(board)):
-                    if board[i][j] == color:
-                        for di, dj in [(-1,0), (1,0), (0,-1), (0,1), (-1,-1), (-1,1), (1,-1), (1,1)]:
-                            ni, nj = i + di, j + dj
-                            if 0 <= ni < len(board) and 0 <= nj < len(board) and board[ni][nj] == color:
-                                count += 1
-            return count // 2
-        yellow_connectivity = count_neighbors(env.board, 'yellow')
-        red_connectivity = count_neighbors(env.board, 'red')
-        connectivity_diff = yellow_connectivity - red_connectivity
-
-        score = piece_diff * 1.0 + move_diff * 0.5 + center_diff * 0.3 + connectivity_diff * 0.2
-        return score if player == 'yellow' else -score
-    except Exception as e:
-        raise RuntimeError(f"Error in evaluate_board: {type(e).__name__}: {str(e)}")
-
-def minimax_evaluation(env: AtaxxEnvironment, player: str, depth: int, alpha: float = -float('inf'), beta: float = float('inf')) -> int:
-    """Đánh giá trạng thái bàn cờ với Alpha-Beta Pruning."""
-    try:
-        if depth == 0 or env.is_game_over():
-            return evaluate_board(env, player)
-
-        valid_moves = sort_moves(env.get_valid_moves(), env)
-        if not valid_moves and not env.is_game_over():
-            raise ValueError("No valid moves but game is not over")
-
-        if player == 'yellow':
-            best_score = -float('inf')
-            for move in valid_moves:
-                next_env = env.clone()
-                if not isinstance(next_env, AtaxxEnvironment):
-                    raise ValueError("Cloned environment is invalid")
-                next_env.make_move(move['from'], move['to'])
-                score = minimax_evaluation(next_env, 'red', depth - 1, alpha, beta)
-                best_score = max(best_score, score)
-                alpha = max(alpha, best_score)
-                if beta <= alpha:
-                    break
-        else:
-            best_score = float('inf')
-            for move in valid_moves:
-                next_env = env.clone()
-                if not isinstance(next_env, AtaxxEnvironment):
-                    raise ValueError("Cloned environment is invalid")
-                next_env.make_move(move['from'], move['to'])
-                score = minimax_evaluation(next_env, 'yellow', depth - 1, alpha, beta)
-                best_score = min(best_score, score)
-                beta = min(beta, best_score)
-                if beta <= alpha:
-                    break
-        
-        return best_score
-    except Exception as e:
-        raise RuntimeError(f"Error in minimax_evaluation: {type(e).__name__}: {str(e)}")
-
 def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2) -> AtaxxEnvironment:
-    """Mô phỏng trò chơi sử dụng Minimax."""
+    """
+    Thực hiện mô phỏng sử dụng thuật toán Minimax từ trạng thái hiện tại đến khi trò chơi kết thúc
+    hoặc đạt độ sâu tối đa.
+    
+    Args:
+        env: Môi trường Ataxx hiện tại.
+        player: Người chơi hiện tại ('yellow' hoặc 'red').
+        depth: Độ sâu của Minimax (mặc định 2).
+    
+    Returns:
+        AtaxxEnvironment: Trạng thái bàn cờ cuối cùng sau mô phỏng.
+    
+    Raises:
+        ValueError: Nếu môi trường, người chơi, hoặc tham số không hợp lệ.
+        RuntimeError: Nếu có lỗi trong quá trình mô phỏng.
+    """
     if not isinstance(env, AtaxxEnvironment):
         raise ValueError("Invalid environment: must be AtaxxEnvironment")
-    if player not in ['yellow', 'red']:
+    if player not in ["yellow", "red"]:
         raise ValueError("Invalid player: must be 'yellow' or 'red'")
     if depth < 1:
         raise ValueError("Depth must be at least 1")
-
+    
     try:
-        current_env = env.clone()
-        if not isinstance(current_env, AtaxxEnvironment):
-            raise ValueError("Cloned environment is invalid")
-        current_player = player
-
+        current_env = env.clone()  # Sao chép môi trường
+        current_player = player  # Người chơi hiện tại
+        
+        
         while not current_env.is_game_over():
-            moves = sort_moves(current_env.get_valid_moves(), current_env)
+            # Lấy các nước đi hợp lệ
+            moves = current_env.get_valid_moves()
             if not moves:
-                current_env.current_player = 'red' if current_env.current_player == 'yellow' else 'yellow'
-                if not current_env.get_valid_moves() and not current_env.is_game_over():
-                    raise ValueError("No valid moves for both players but game is not over")
+                # Nếu không có nước đi, chuyển lượt
+                current_env.current_player = "red" if current_env.current_player == "yellow" else "yellow"
                 continue
-
+            
+            # Tạo Minimax để đánh giá các nước đi
             best_move = None
-            best_score = -float('inf') if current_player == 'yellow' else float('inf')
+            best_score = -float('inf')
+            
             for move in moves:
+                # Thực hiện mô phỏng nước đi
                 next_env = current_env.clone()
-                if not isinstance(next_env, AtaxxEnvironment):
-                    raise ValueError("Cloned environment is invalid")
-                next_env.make_move(move['from'], move['to'])
-                if next_env.board == current_env.board:
-                    raise RuntimeError(f"Move {move} did not change the board state")
+                next_env.make_move(move["from"], move["to"])  # make_move tự động chuyển lượt
+                
+                # Đánh giá trạng thái sau nước đi
                 score = minimax_evaluation(next_env, current_player, depth - 1)
-                if (current_player == 'yellow' and score > best_score) or \
-                   (current_player == 'red' and score < best_score):
+                
+                # Cập nhật nước đi tốt nhất
+                if score > best_score:
                     best_score = score
                     best_move = move
-
+            
+            # Thực hiện nước đi tốt nhất
             if best_move:
-                current_env.make_move(best_move['from'], best_move['to'])
-            else:
-                current_env.current_player = 'red' if current_env.current_player == 'yellow' else 'yellow'
-
+                current_env.make_move(best_move["from"], best_move["to"])  # make_move tự động chuyển lượt
+            
         return current_env
-
+    
     except Exception as e:
-        raise RuntimeError(f"Error in minimax_rollout: {type(e).__name__}: {str(e)}")
+        raise RuntimeError(f"Error in minimax_rollout: {str(e)}")
+
+def minimax_evaluation(env: AtaxxEnvironment, player: str, depth: int) -> int:
+    """
+    Đánh giá trạng thái của bàn cờ sau một số nước đi sử dụng thuật toán Minimax.
+
+    Args:
+        env: Môi trường Ataxx hiện tại.
+        player: Người chơi hiện tại ('yellow' hoặc 'red').
+        depth: Độ sâu của thuật toán Minimax.
+
+    Returns:
+        int: Điểm số của trạng thái bàn cờ.
+    """
+    if depth == 0 or env.is_game_over():
+        # Trả về điểm số hiện tại khi đạt độ sâu tối đa hoặc trò chơi kết thúc
+        return evaluate_board(env, player)
+
+    # Tiến hành phân nhánh
+    valid_moves = env.get_valid_moves()
+    best_score = -float('inf')
+    for move in valid_moves:
+        next_env = env.clone()
+        next_env.make_move(move["from"], move["to"])
+        score = minimax_evaluation(next_env, player, depth - 1)
+        best_score = max(best_score, score)
+    
+    return best_score
+
+def evaluate_board(env: AtaxxEnvironment, player: str) -> int:
+    """
+    Đánh giá bàn cờ hiện tại dựa trên số lượng quân cờ của người chơi.
+    Trả về điểm số cho người chơi hiện tại.
+
+    Args:
+        env: Môi trường Ataxx hiện tại.
+        player: Người chơi hiện tại ('yellow' hoặc 'red').
+
+    Returns:
+        int: Điểm số của người chơi.
+    """
+    yellow_score = sum(row.count('yellow') for row in env.board)
+    red_score = sum(row.count('red') for row in env.board)
+
+    if player == "yellow":
+        return yellow_score - red_score
+    else:
+        return red_score - yellow_score
