@@ -1,5 +1,4 @@
 from app.ai.ataxx_env import AtaxxEnvironment
-from app.ai.variants.full_minimax import FullMinimax
 
 def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2) -> AtaxxEnvironment:
     """
@@ -27,28 +26,93 @@ def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2) -> Ataxx
     
     try:
         current_env = env.clone()  # Sao chép môi trường
-        rollout_depth = 0
+        current_player = player  # Người chơi hiện tại
         
         while not current_env.is_game_over():
+            # Lấy các nước đi hợp lệ
             moves = current_env.get_valid_moves()
             if not moves:
                 # Nếu không có nước đi, chuyển lượt
                 current_env.current_player = "red" if current_env.current_player == "yellow" else "yellow"
-                rollout_depth += 1
                 continue
             
-            # Sử dụng FullMinimax để chọn nước đi
-            minimax = FullMinimax(current_env, current_env.current_player, depth=depth)
-            move = minimax.run()
+            # Tạo Minimax để đánh giá các nước đi
+            best_move = None
+            best_score = -float('inf') if current_player == "yellow" else float('inf')
             
-            if not move or not isinstance(move, dict) or "from" not in move or "to" not in move:
-                break
+            for move in moves:
+                # Thực hiện mô phỏng nước đi
+                next_env = current_env.clone()
+                next_env.make_move(move["from"], move["to"])  # make_move tự động chuyển lượt
+                
+                # Đánh giá trạng thái sau nước đi
+                score = minimax_evaluation(next_env, current_player, depth - 1)
+                
+                # Cập nhật nước đi tốt nhất
+                if (current_player == "yellow" and score > best_score) or (current_player == "red" and score < best_score):
+                    best_score = score
+                    best_move = move
             
-            # Thực hiện nước đi
-            current_env.make_move(move["from"], move["to"])  # make_move tự động chuyển lượt
-            rollout_depth += 1
-        
+            # Thực hiện nước đi tốt nhất
+            if best_move:
+                current_env.make_move(best_move["from"], best_move["to"])  # make_move tự động chuyển lượt
+            
         return current_env
     
     except Exception as e:
         raise RuntimeError(f"Error in minimax_rollout: {str(e)}")
+
+def minimax_evaluation(env: AtaxxEnvironment, player: str, depth: int) -> int:
+    """
+    Đánh giá trạng thái của bàn cờ sau một số nước đi sử dụng thuật toán Minimax.
+
+    Args:
+        env: Môi trường Ataxx hiện tại.
+        player: Người chơi hiện tại ('yellow' hoặc 'red').
+        depth: Độ sâu của thuật toán Minimax.
+
+    Returns:
+        int: Điểm số của trạng thái bàn cờ.
+    """
+    if depth == 0 or env.is_game_over():
+        # Trả về điểm số hiện tại khi đạt độ sâu tối đa hoặc trò chơi kết thúc
+        return evaluate_board(env, player)
+
+    # Tiến hành phân nhánh
+    valid_moves = env.get_valid_moves()
+    if player == "yellow":
+        best_score = -float('inf')
+        for move in valid_moves:
+            next_env = env.clone()
+            next_env.make_move(move["from"], move["to"])
+            score = minimax_evaluation(next_env, "red", depth - 1)
+            best_score = max(best_score, score)
+    else:
+        best_score = float('inf')
+        for move in valid_moves:
+            next_env = env.clone()
+            next_env.make_move(move["from"], move["to"])
+            score = minimax_evaluation(next_env, "yellow", depth - 1)
+            best_score = min(best_score, score)
+    
+    return best_score
+
+def evaluate_board(env: AtaxxEnvironment, player: str) -> int:
+    """
+    Đánh giá bàn cờ hiện tại dựa trên số lượng quân cờ của người chơi.
+    Trả về điểm số cho người chơi hiện tại.
+
+    Args:
+        env: Môi trường Ataxx hiện tại.
+        player: Người chơi hiện tại ('yellow' hoặc 'red').
+
+    Returns:
+        int: Điểm số của người chơi.
+    """
+    yellow_score = sum(row.count('yellow') for row in env.board)
+    red_score = sum(row.count('red') for row in env.board)
+
+    if player == "yellow":
+        return yellow_score - red_score
+    else:
+        return red_score - yellow_score
