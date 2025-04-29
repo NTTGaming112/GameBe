@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from copy import deepcopy
+import copy
 
 class AtaxxEnvironment:
     def __init__(self, board: List[List[str]], current_player: str):
@@ -35,7 +35,7 @@ class AtaxxEnvironment:
         return True
 
     def clone(self) -> 'AtaxxEnvironment':
-        return AtaxxEnvironment(deepcopy(self.board), self.current_player)
+        return AtaxxEnvironment(copy.copy(self.board), self.current_player)
 
     def is_valid_position(self, row: int, col: int) -> bool:
         return 0 <= row < self.board_size and 0 <= col < self.board_size

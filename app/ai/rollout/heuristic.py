@@ -2,81 +2,81 @@ from app.ai.ataxx_env import AtaxxEnvironment
 
 def heuristic_rollout(env: AtaxxEnvironment, player: str, max_depth: int = 50) -> AtaxxEnvironment:
     """
-    Thực hiện mô phỏng sử dụng heuristic, ưu tiên sao chép (di chuyển lân cận) hơn nhảy,
-    đến khi trò chơi kết thúc hoặc đạt độ sâu tối đa.
-    
-    Args:
-        env: Môi trường Ataxx hiện tại.
-        player: Người chơi hiện tại ('yellow' hoặc 'red').
-        max_depth: Số nước đi tối đa trong mô phỏng (mặc định 50).
-    
-    Returns:
-        AtaxxEnvironment: Trạng thái bàn cờ cuối cùng sau mô phỏng.
-    
-    Raises:
-        ValueError: Nếu môi trường hoặc người chơi không hợp lệ.
-        RuntimeError: Nếu có lỗi trong quá trình mô phỏng.
+    Mô phỏng game với heuristic nâng cao từ domain knowledge trong paper Ataxx.
     """
     if not isinstance(env, AtaxxEnvironment):
         raise ValueError("Invalid environment: must be AtaxxEnvironment")
-    if player not in ["yellow", "red"]:
+    if player not in {"yellow", "red"}:
         raise ValueError("Invalid player: must be 'yellow' or 'red'")
     if max_depth < 1:
         raise ValueError("Max depth must be at least 1")
-    
+
+    def neighbors(r, c):
+        return [(r + dr, c + dc)
+                for dr in [-1, 0, 1]
+                for dc in [-1, 0, 1]
+                if not (dr == 0 and dc == 0) and 0 <= r + dr < 7 and 0 <= c + dc < 7]
+
+    # hệ số từ domain knowledge
+    s1, s2, s3, s4 = 1.0, 0.4, 0.7, 0.4
+
     try:
-        current_env = env.clone()  # Sao chép môi trường
+        current_env = env.clone()
         depth = 0
-        
+
         while not current_env.is_game_over() and depth < max_depth:
             moves = current_env.get_valid_moves()
             if not moves:
-                # Nếu không có nước đi, chuyển lượt
                 current_env.current_player = "red" if current_env.current_player == "yellow" else "yellow"
                 depth += 1
                 continue
-            
-            # Heuristic: Ưu tiên sao chép (lân cận) và chiếm nhiều ô
+
             best_move = None
             best_score = float('-inf')
-            center_row, center_col = 3, 3  # Trung tâm của bàn cờ 7x7
-            scores = current_env.calculate_scores()
-            
+            scores_before = current_env.calculate_scores()
+            cur_player = current_env.current_player
+
             for move in moves:
                 from_row, from_col = move["from"]["row"], move["from"]["col"]
                 to_row, to_col = move["to"]["row"], move["to"]["col"]
-                
-                # Xác định loại nước đi: sao chép (lân cận) hay nhảy
-                distance = abs(to_row - from_row) + abs(to_col - from_col)
-                is_copy = distance <= 1  # Sao chép nếu khoảng cách Manhattan <= 1
-                
-                # Tính khoảng cách đến trung tâm
-                distance_to_center = abs(to_row - center_row) + abs(to_col - center_col)
-                
-                # Ước lượng số ô chiếm được
-                temp_env = current_env.clone()
-                temp_env.make_move(move["from"], move["to"])
-                new_scores = temp_env.calculate_scores()
-                score_gain = (new_scores["yellowScore"] if current_env.current_player == "yellow" else new_scores["redScore"]) - \
-                             (scores["yellowScore"] if current_env.current_player == "yellow" else scores["redScore"])
-                
-                # Heuristic: Ưu tiên sao chép, chiếm ô, và gần trung tâm
-                heuristic_score = score_gain + (5.0 if is_copy else 0.0) - distance_to_center * 0.5
-                
-                if heuristic_score > best_score:
-                    best_score = heuristic_score
+                is_copy = abs(to_row - from_row) <= 1 and abs(to_col - from_col) <= 1
+
+                # domain-knowledge scoring
+                score = 0.0
+
+                # s1: số quân địch bị chiếm tại vị trí đến
+                for nr, nc in neighbors(to_row, to_col):
+                    cell = current_env.get_cell(nr, nc)
+                    if cell and cell != cur_player:
+                        score += s1
+
+                # s2: số quân ta xung quanh điểm đến
+                score += s2 * sum(1 for nr, nc in neighbors(to_row, to_col)
+                                  if current_env.get_cell(nr, nc) == cur_player)
+
+                # s3: thưởng nếu là nước copy
+                if is_copy:
+                    score += s3
+                else:
+                    # s4: phạt nếu là jump và điểm đi bị "rỗng"
+                    score -= s4 * sum(1 for nr, nc in neighbors(from_row, from_col)
+                                      if current_env.get_cell(nr, nc) == cur_player)
+
+                # thêm heuristic phụ: chiếm trung tâm, ưu tiên trung tâm
+                distance_to_center = abs(to_row - 3) + abs(to_col - 3)
+                score -= distance_to_center * 0.1
+
+                if score > best_score:
+                    best_score = score
                     best_move = move
-            
+
             if best_move:
-                current_env.make_move(best_move["from"], best_move["to"])  # make_move tự động chuyển lượt
+                current_env.make_move(best_move["from"], best_move["to"])
             else:
                 current_env.current_player = "red" if current_env.current_player == "yellow" else "yellow"
-                depth += 1
-                continue
-            
             depth += 1
-        
+
         return current_env
-    
+
     except Exception as e:
         raise RuntimeError(f"Error in heuristic_rollout: {str(e)}")

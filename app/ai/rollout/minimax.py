@@ -45,10 +45,7 @@ def minimax_rollout(env: AtaxxEnvironment, player: str, depth: int = 2, max_dept
             move = minimax.run()
             
             if not move or not isinstance(move, dict) or "from" not in move or "to" not in move:
-                # Nếu Minimax không trả về nước đi hợp lệ, chuyển lượt
-                current_env.current_player = "red" if current_env.current_player == "yellow" else "yellow"
-                rollout_depth += 1
-                continue
+                break
             
             # Thực hiện nước đi
             current_env.make_move(move["from"], move["to"])  # make_move tự động chuyển lượt
