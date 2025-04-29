@@ -142,3 +142,9 @@ class AtaxxEnvironment:
         return (scores["yellowScore"] == 0 or scores["redScore"] == 0 or
                 self.is_board_full() or
                 (not self.has_valid_moves("yellow") and not self.has_valid_moves("red")))
+    
+    def get_cell(self, row, col):
+        if 0 <= row < 7 and 0 <= col < 7:
+            return self.board[row][col]
+        else:
+            return None  # Nếu ra ngoài phạm vi bảng, trả về None

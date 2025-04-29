@@ -20,13 +20,11 @@ def heuristic_rollout(env: AtaxxEnvironment, player: str) -> AtaxxEnvironment:
 
     try:
         current_env = env.clone()
-        depth = 0
 
         while not current_env.is_game_over():
             moves = current_env.get_valid_moves()
             if not moves:
                 current_env.current_player = "red" if current_env.current_player == "yellow" else "yellow"
-                depth += 1
                 continue
 
             best_move = None
@@ -72,7 +70,6 @@ def heuristic_rollout(env: AtaxxEnvironment, player: str) -> AtaxxEnvironment:
                 current_env.make_move(best_move["from"], best_move["to"])
             else:
                 current_env.current_player = "red" if current_env.current_player == "yellow" else "yellow"
-            depth += 1
 
         return current_env
 

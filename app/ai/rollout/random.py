@@ -23,7 +23,6 @@ def random_rollout(env: AtaxxEnvironment, player: str) -> AtaxxEnvironment:
     
     try:
         current_env = env.clone()  # Sao chép môi trường
-        depth = 0
         
         while not current_env.is_game_over():
             moves = current_env.get_valid_moves()
@@ -34,7 +33,6 @@ def random_rollout(env: AtaxxEnvironment, player: str) -> AtaxxEnvironment:
             # Chọn và thực hiện nước đi ngẫu nhiên
             move = random.choice(moves)
             current_env.make_move(move["from"], move["to"])  # make_move tự động chuyển lượt
-            depth += 1
         
         return current_env
     
