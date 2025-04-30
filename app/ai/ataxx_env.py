@@ -5,7 +5,7 @@ class AtaxxEnvironment:
     def __init__(self, board: List[List[str]], current_player: str):
         self.board_size = 7
         self.max_move_distance = 2
-        self._valid_moves_cache = None  # Cache cho get_valid_moves()
+        self._valid_moves_cache = None
         self.neighbor_offsets = [
             (-1, -1), (-1, 0), (-1, 1),
             (0, -1), (0, 1),

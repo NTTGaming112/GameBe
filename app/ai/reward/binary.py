@@ -1,33 +1,45 @@
 from app.ai.ataxx_env import AtaxxEnvironment
-from typing import Union
+from typing import Tuple
 
-def binary_reward(env: AtaxxEnvironment, bot_player: str, use_fractional_if_ongoing: bool = False) -> Union[int, float]:
+def binary_reward(env: AtaxxEnvironment, bot_player: str) -> Tuple[float, bool]:
     """
-    Trả về phần thưởng cho bot dựa trên kết quả trò chơi.
+    Trả về phần thưởng nhị phân tối ưu hóa cho bot, lấy cảm hứng từ MctsAI.
     
     - Nếu trò chơi kết thúc:
-        + Trả về 1 nếu bot thắng, -1 nếu thua, 0 nếu hoà.
+        + Trả về reward trong [0, 1] (1.0: thắng, 0.0: thua, 0.5: hòa).
     - Nếu chưa kết thúc:
-        + Trả về 0 (mặc định) hoặc fractional reward nếu `use_fractional_if_ongoing=True`.
+        + Trả về 0.5 (trạng thái trung lập).
+    - Chuẩn hóa từ [-1, 1] sang [0, 1] như MctsAI.
+    
+    Args:
+        env: Môi trường Ataxx hiện tại.
+        bot_player: 'yellow' hoặc 'red'.
+    
+    Returns:
+        Tuple (reward, is_win): reward trong [0, 1], is_win là True nếu thắng.
     """
     if bot_player not in {"yellow", "red"}:
         raise ValueError("bot_player must be 'yellow' or 'red'")
 
-    if not env.is_game_over():
-        if use_fractional_if_ongoing:
-            scores = env.calculate_scores()
-            bot_score = scores[f"{bot_player}Score"]
-            opp_score = scores["redScore"] if bot_player == "yellow" else scores["yellowScore"]
-            score_diff = bot_score - opp_score
-            return max(min(score_diff / 49.0, 1.0), -1.0)
-        return 0
-
     scores = env.calculate_scores()
-    yellow, red = scores["yellowScore"], scores["redScore"]
-
-    if yellow > red:
-        return 1 if bot_player == "yellow" else -1
-    elif red > yellow:
-        return 1 if bot_player == "red" else -1
+    yellow_score = scores["yellowScore"]
+    red_score = scores["redScore"]
+    
+    # Tính giá trị gốc trong [-1, 1]
+    if not env.is_game_over():
+        value = 0.0  # Trung lập khi chưa kết thúc
     else:
-        return 0
+        if yellow_score > red_score:
+            value = 1.0 if bot_player == "yellow" else -1.0
+        elif red_score > yellow_score:
+            value = 1.0 if bot_player == "red" else -1.0
+        else:
+            value = 0.0
+    
+    # Chuẩn hóa sang [0, 1]
+    reward = (value + 1.0) / 2.0
+    
+    # Xác định is_win
+    is_win = value > 0.0
+    
+    return reward, is_win

@@ -1,31 +1,35 @@
 from app.ai.ataxx_env import AtaxxEnvironment
-from typing import Union
+from typing import Tuple
 
-def fractional_reward(env: AtaxxEnvironment, bot_player: str, align_with_binary: bool = False) -> Union[int, float]:
+def fractional_reward(env: AtaxxEnvironment, bot_player: str) -> Tuple[float, bool]:
     """
-    Trả về phần thưởng dạng fractional hoặc binary-like dựa trên chênh lệch điểm số trong Ataxx.
+    Trả về phần thưởng liên tục thuần túy dựa trên chênh lệch điểm số trong Ataxx.
+    
+    - Luôn trả về phần thưởng liên tục chuẩn hóa trong [0, 1] dựa trên hiệu số điểm.
+    - Chuẩn hóa từ [-1, 1] sang [0, 1] như MctsAI.
     
     Args:
         env: Môi trường Ataxx hiện tại.
         bot_player: 'yellow' hoặc 'red'.
-        align_with_binary: Nếu True và game over → trả về 1 / -1 / 0 như binary reward.
     
     Returns:
-        float ∈ [-1, 1] nếu align_with_binary=False, hoặc int nếu align_with_binary=True và game kết thúc.
+        Tuple (reward, is_win): reward trong [0, 1], is_win là True nếu có lợi thế.
     """
     if bot_player not in {"yellow", "red"}:
         raise ValueError("bot_player must be 'yellow' or 'red'")
 
     scores = env.calculate_scores()
-    yellow = scores.get("yellowScore", 0)
-    red = scores.get("redScore", 0)
-
-    if align_with_binary and env.is_game_over():
-        if yellow > red:
-            return 1 if bot_player == "yellow" else -1
-        elif red > yellow:
-            return 1 if bot_player == "red" else -1
-        return 0
-
-    diff = (yellow - red) if bot_player == "yellow" else (red - yellow)
-    return max(min(diff / 49.0, 1.0), -1.0)
+    yellow_score = scores.get("yellowScore", 0)
+    red_score = scores.get("redScore", 0)
+    
+    # Tính giá trị gốc trong [-1, 1]
+    diff = yellow_score - red_score if bot_player == "yellow" else red_score - yellow_score
+    value = max(min(diff / 49.0, 1.0), -1.0)  # Chuẩn hóa theo bàn 7x7
+    
+    # Chuẩn hóa sang [0, 1]
+    reward = (value + 1.0) / 2.0
+    
+    # Xác định is_win
+    is_win = value > 0.0
+    
+    return reward, is_win

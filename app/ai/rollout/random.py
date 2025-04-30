@@ -1,7 +1,7 @@
 from app.ai.ataxx_env import AtaxxEnvironment
 import random
 
-def random_rollout(env: AtaxxEnvironment, player: str) -> AtaxxEnvironment:
+def random_rollout(env: AtaxxEnvironment, player: str, max_depth=100) -> AtaxxEnvironment:
     """
     Thực hiện mô phỏng ngẫu nhiên từ trạng thái hiện tại đến khi trò chơi kết thúc hoặc đạt độ sâu tối đa.
     
@@ -23,17 +23,16 @@ def random_rollout(env: AtaxxEnvironment, player: str) -> AtaxxEnvironment:
     
     try:
         current_env = env.clone()  # Sao chép môi trường
-        
-        while not current_env.is_game_over():
+        depth = 0
+        while not current_env.is_game_over() and depth < max_depth:
             moves = current_env.get_valid_moves()
             if not moves:
                 # Nếu không có nước đi, kết thúc lượt
                 break
-            
             # Chọn và thực hiện nước đi ngẫu nhiên
             move = random.choice(moves)
             current_env.make_move(move["from"], move["to"])  # make_move tự động chuyển lượt
-        
+            depth += 1
         return current_env
     
     except Exception as e:

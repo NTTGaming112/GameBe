@@ -8,7 +8,7 @@ from app.ai.variants.mcts_fractional import MCTSFractional
 from app.ai.variants.mcts_fractional_dk import MCTSFractionalDK
 from app.ai.variants.mcts_minimax import MCTSMinimax
 
-def get_trained_move(board: List[List[str]], current_player: str, iterations: int = 50, algorithm: str = "mcts") -> Dict[str, Any]:
+def get_trained_move(board: List[List[str]], current_player: str, iterations: int = 50, algorithm: str = "mcts-binary", temperature: float = 0.0) -> Dict[str, Any]:
     try:
         if algorithm == "mcts-binary":
             mcts = MCTSBinary(board, current_player)
@@ -22,8 +22,8 @@ def get_trained_move(board: List[List[str]], current_player: str, iterations: in
             mcts = MCTSMinimax(board, current_player)
         else:
             mcts = MCTSBinary(board, current_player)
-
-        return mcts.run(simulations=iterations)
+        move = mcts.get_move(board, current_player, simulations=iterations, temperature=temperature)
+        return move
     except Exception as e:
         raise Exception(f"Error in get_trained_move with algorithm {algorithm}: {str(e)}")
 
