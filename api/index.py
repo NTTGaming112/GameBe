@@ -122,9 +122,12 @@ def get_move():
         
         from_pos, to_pos = best_move
         response = {
-            "from_pos": list(from_pos),
-            "to_pos": list(to_pos),
-            "execution_time": execution_time
+            "move": {
+                "from": list(from_pos),
+                "to": list(to_pos)
+            },
+            "execution_time": execution_time,
+            "current_player": state.current_player,
         }
         
         logger.info(f"Responding with move: {response}")
