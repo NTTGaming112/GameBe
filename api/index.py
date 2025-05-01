@@ -123,8 +123,14 @@ def get_move():
         from_pos, to_pos = best_move
         response = {
             "move": {
-                "from": list(from_pos),
-                "to": list(to_pos)
+                "from": {
+                    "row": from_pos[0],
+                    "col": from_pos[1]
+                },
+                "to": {
+                    "row": to_pos[0],
+                    "col": to_pos[1]
+                }
             },
             "execution_time": execution_time,
             "current_player": state.current_player,
