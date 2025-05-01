@@ -1,34 +1,27 @@
-import math
+from typing import List, Dict, Any, Callable, Optional
 import random
-from typing import Dict, Any, Optional, List, Callable
 from app.ai.ataxx_env import AtaxxEnvironment
 
-def gumbal_softmax(arr: List[float], temperature: float) -> List[float]:
-    """Chuyển đổi mảng số thành phân phối xác suất với nhiệt độ."""
-    arr = [v / temperature for v in arr]
-    mx = max(arr)
-    arr = [math.exp(v - mx) for v in arr]
-    s = sum(arr)
-    return [v / s for v in arr]
-
-class Node:
-    def __init__(self, move: Optional[Dict[str, Any]] = None, parent: Optional['Node'] = None):
-        self.move = move
+class MCTSNode:
+    def __init__(self, state_key: int, valid_moves: List[Dict[str, Any]], parent: Optional['MCTSNode'] = None):
+        self.state_key = state_key  # Zobrist hash
+        self.valid_moves = valid_moves  # Lưu trữ danh sách nước đi
         self.parent = parent
-        self.children: List['Node'] = []
-        self.visits: int = 0
-        self.value: float = 0.0
-        self.wins: int = 0
+        self.children: Dict[str, 'MCTSNode'] = {}  # key: move_key, value: node
+        self.wins = 0.0
+        self.visits = 0
+        self.value = 0.0
+        self.reward_cache: Optional[tuple[float, bool]] = None  # Cache phần thưởng
 
 class BaseMCTS:
     def __init__(
         self,
-        board: Any,
-        current_player: Any,
-        rollout_fn: Callable,
-        reward_fn: Callable,
-        select_fn: Callable,
-        c: float = 2.0
+        board: List[List[str]],
+        current_player: str,
+        rollout_fn: Callable[[AtaxxEnvironment, str], AtaxxEnvironment],
+        reward_fn: Callable[[AtaxxEnvironment, str], tuple[float, bool]],
+        select_fn: Callable[[MCTSNode], MCTSNode],
+        c: float = 0.7
     ):
         self.env = AtaxxEnvironment(board, current_player)
         self.player = current_player
@@ -36,105 +29,103 @@ class BaseMCTS:
         self.reward_fn = reward_fn
         self.select_fn = select_fn
         self.c = c
-        self.root: Optional[Node] = None
+        self.tree: Dict[int, MCTSNode] = {}
+        self.root_key = self.env.get_state_key()
+        self.tree[self.root_key] = MCTSNode(self.root_key, self.env.get_valid_moves())
+        self.max_nodes = 10000
 
-    def update_root(self, new_board: Any, new_player: Any) -> None:
-        """Cập nhật nút gốc dựa trên trạng thái mới, tái sử dụng cây nếu có thể."""
-        new_env = AtaxxEnvironment(new_board, new_player)
-        if self.root is None:
-            self.root = Node()
-            self.env = new_env
-            self.player = new_player
-            return
+    def _get_move_key(self, move: Dict[str, Any]) -> str:
+        return f"{move['from']['row']},{move['from']['col']}->{move['to']['row']},{move['to']['col']}"
 
-        # Tìm nút con khớp với trạng thái mới
-        next_root = None
-        for child in self.root.children:
-            temp_env = self.env.clone()
-            temp_env.make_move(child.move["from"], child.move["to"])
-            if temp_env.board == new_board and temp_env.current_player == new_player:
-                next_root = child
-                break
-
-        if next_root is None:
-            # Nếu không tìm thấy, tạo cây mới
-            self.root = Node()
-        else:
-            # Tái sử dụng cây, ngắt liên kết với cha
-            next_root.parent = None
-            self.root = next_root
-
-        self.env = new_env
-        self.player = new_player
-
-    def run(
-        self,
-        simulations: int,
-        temperature: float = 0.0,
-        reset_root: bool = False
-    ) -> Optional[Dict[str, Any]]:
-        """Chạy MCTS với số lần mô phỏng, hỗ trợ tái sử dụng cây và xác suất nước đi."""
-        if reset_root or self.root is None:
-            self.root = Node()
-
+    def run(self, simulations: int) -> None:
         for _ in range(simulations):
-            node = self.root
-            env = self.env.clone()
-
-            # Selection
-            while node.children and not env.is_game_over():
-                node = self.select_fn(node, self.c)
-                env.make_move(node.move["from"], node.move["to"])
-
-            # Expansion
-            if not env.is_game_over() and not node.children:
-                moves = env.get_valid_moves()
-                for move in moves:
-                    if not any(child.move == move for child in node.children):
-                        child = Node(move=move, parent=node)
-                        node.children.append(child)
-
-                unvisited = [child for child in node.children if child.visits == 0]
-                if unvisited:
-                    node = random.choice(unvisited)
-                    env.make_move(node.move["from"], node.move["to"])
-
-            # Simulation
-            final_env = self.rollout_fn(env, self.player)
-
-            # Backpropagation
-            reward, is_win = self.reward_fn(final_env, self.player) \
-                if isinstance(self.reward_fn(final_env, self.player), tuple) \
-                else (self.reward_fn(final_env, self.player), self.reward_fn(final_env, self.player) > 0.5)
-
-            while node:
+            if self.root_key not in self.tree or self.tree[self.root_key] is None:
+                print("Root node missing or None, reinitializing")
+                self.tree[self.root_key] = MCTSNode(self.root_key, self.env.get_valid_moves())
+            
+            node = self.select_fn(self.tree[self.root_key])
+            if node is None:
+                print("select_fn returned None, skipping simulation")
+                continue
+                
+            if not self.env.is_game_over() and node.valid_moves and node.visits > 0:
+                move = random.choice(node.valid_moves)
+                temp_env = self.env.clone()
+                temp_env.make_move(move["from"], move["to"])
+                child_key = temp_env.get_state_key()
+                if child_key not in self.tree or self.tree[child_key] is None:
+                    self.tree[child_key] = MCTSNode(child_key, temp_env.get_valid_moves(), node)
+                if self._get_move_key(move) not in node.children:
+                    node.children[self._get_move_key(move)] = self.tree[child_key]
+                node = self.tree[child_key]
+                rollout_env = temp_env
+            else:
+                rollout_env = self.env.clone()
+            
+            final_env = self.rollout_fn(rollout_env, self.player)
+            if node.reward_cache is None:
+                node.reward_cache = self.reward_fn(final_env, self.player)
+            reward, is_win = node.reward_cache
+            
+            while node is not None:
                 node.visits += 1
                 node.value += reward
                 if is_win:
                     node.wins += 1
                 node = node.parent
-
-        if not self.root.children:
-            return None
-
-        # Chọn nước đi dựa trên temperature
-        if temperature == 0:
-            best_child = max(self.root.children, key=lambda c: c.visits)
-            return best_child.move
-        else:
-            visits = [child.visits for child in self.root.children]
-            probs = gumbal_softmax(visits, temperature)
-            acc_probs = [probs[0]]
-            for i in range(1, len(probs)):
-                acc_probs.append(acc_probs[-1] + probs[i])
             
-            r = random.random()
-            for i, prob in enumerate(acc_probs):
-                if r < prob:
-                    return self.root.children[i].move
-            return self.root.children[-1].move
+            self._limit_tree_size()
 
-    def get_move(self, board: Any, player: Any, simulations: int, temperature: float = 0.0) -> Optional[Dict[str, Any]]:
-        """Tiện ích để lấy nước đi, tự động cập nhật cây."""
-        self.update_root(board, player)
-        return self.run(simulations, temperature)
+    def _limit_tree_size(self) -> None:
+        if len(self.tree) > self.max_nodes:
+            print("Limiting tree size")
+            sorted_nodes = sorted(
+                [(k, v) for k, v in self.tree.items() if k != self.root_key],
+                key=lambda x: x[1].visits
+            )
+            self.tree = dict(sorted_nodes[-self.max_nodes + 1:] + [(self.root_key, self.tree[self.root_key])])
+
+    def get_move(self, board: List[List[str]], current_player: str, simulations: int, temperature: float) -> Dict[str, Any]:
+        if self.root_key not in self.tree or self.tree[self.root_key] is None:
+            print("Root node missing or None in get_move, reinitializing")
+            self.tree[self.root_key] = MCTSNode(self.root_key, self.env.get_valid_moves())
+        
+        self.run(simulations)
+        root = self.tree[self.root_key]
+        if not root.valid_moves:
+            print("No valid moves available")
+            return {}
+        
+        if not root.children:
+            print("No children nodes, selecting random valid move")
+            return random.choice(root.valid_moves) if root.valid_moves else {}
+        
+        if temperature == 0.0:
+            best_move_key = max(root.children, key=lambda k: root.children[k].visits)
+        else:
+            scores = {k: child.visits ** (1.0 / temperature) for k, child in root.children.items()}
+            total = sum(scores.values())
+            if total == 0:
+                print("No visits in children, selecting random move")
+                return random.choice(list(root.children.keys()))
+            scores = {k: v / total for k, v in scores.items()}
+            best_move_key = random.choices(list(scores.keys()), weights=list(scores.values()), k=1)[0]
+        
+        for move in root.valid_moves:
+            if self._get_move_key(move) == best_move_key:
+                return move
+        print("No matching move found, returning empty move")
+        return {}
+
+    def update_root(self, move: Dict[str, Any]) -> None:
+        new_env = self.env.clone()
+        new_env.make_move(move["from"], move["to"])
+        new_root_key = new_env.get_state_key()
+        
+        if new_root_key not in self.tree or self.tree[new_root_key] is None:
+            print(f"Creating new node for root_key: {new_root_key}")
+            self.tree[new_root_key] = MCTSNode(new_root_key, new_env.get_valid_moves())
+        
+        self.root_key = new_root_key
+        self.env = new_env
+        self.player = "yellow" if self.player == "red" else "red"

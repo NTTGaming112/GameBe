@@ -1,26 +1,26 @@
 import math
-from app.ai.base.base_mcts import Node
+from app.ai.base.base_mcts import MCTSNode
 from typing import Optional
 
-def uct_select_winrate(node: Node, exploration_constant: float = 0.7) -> Optional[Node]:
+def uct_select_winrate(MCTSNode: MCTSNode, exploration_constant: float = 0.7) -> Optional[MCTSNode]:
     """
-    Chọn node con tốt nhất dựa trên công thức UCT Winrate, tối ưu hóa cho phần thưởng nhị phân.
+    Chọn MCTSNode con tốt nhất dựa trên công thức UCT Winrate, tối ưu hóa cho phần thưởng nhị phân.
     
     Args:
-        node: Node cha hiện tại.
+        MCTSNode: MCTSNode cha hiện tại.
         exploration_constant: Hằng số khám phá (mặc định 0.7).
     
     Returns:
-        Node con có giá trị UCT cao nhất, hoặc None nếu không có node con.
+        MCTSNode con có giá trị UCT cao nhất, hoặc None nếu không có MCTSNode con.
     """
-    if not node.children:
+    if not MCTSNode.children:
         return None
 
     return max(
-        node.children,
+        MCTSNode.children,
         key=lambda child: (
             float('inf') if child.visits == 0 else
             (child.wins / child.visits) +
-            exploration_constant * math.sqrt(math.log(node.visits + 1) / (child.visits + 1e-9))
+            exploration_constant * math.sqrt(math.log(MCTSNode.visits + 1) / (child.visits + 1e-9))
         )
     )

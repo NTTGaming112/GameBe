@@ -1,150 +1,150 @@
 from typing import List, Dict, Any
-import copy
+import numpy as np
+from enum import IntEnum
+
+class Piece(IntEnum):
+    EMPTY = 0
+    YELLOW = 1
+    RED = 2
+    BLOCK = 3
 
 class AtaxxEnvironment:
     def __init__(self, board: List[List[str]], current_player: str):
         self.board_size = 7
         self.max_move_distance = 2
-        self._valid_moves_cache = None
         self.neighbor_offsets = [
             (-1, -1), (-1, 0), (-1, 1),
             (0, -1), (0, 1),
             (1, -1), (1, 0), (1, 1)
         ]
+        # Khởi tạo Zobrist table
+        self.zobrist_table = np.random.randint(0, 2**64, (self.board_size, self.board_size, 4), dtype=np.uint64)
+        self.zobrist_player = {Piece.YELLOW: np.random.randint(0, 2**64, dtype=np.uint64),
+                              Piece.RED: np.random.randint(0, 2**64, dtype=np.uint64)}
 
+        self.board = self._convert_board(board)
+        self.player_map = {"yellow": Piece.YELLOW, "red": Piece.RED}
+        if current_player not in self.player_map:
+            raise ValueError("Invalid player: must be 'yellow' or 'red'")
+        self.current_player = self.player_map[current_player]
+
+    def _convert_board(self, board: List[List[str]]) -> np.ndarray:
         if not self._is_valid_board(board):
-            raise ValueError("Invalid board: Must be a 7x7 2D list with valid values ('yellow', 'red', 'empty', 'block')")
-
-        self.board = [row[:] for row in board]
-        self.current_player = current_player
+            raise ValueError("Invalid board")
+        mapping = {"empty": Piece.EMPTY, "yellow": Piece.YELLOW, "red": Piece.RED, "block": Piece.BLOCK}
+        return np.array([[mapping[cell] for cell in row] for row in board], dtype=np.int8)
 
     def _is_valid_board(self, board: List[List[str]]) -> bool:
         if not isinstance(board, list) or len(board) != self.board_size:
-            print(f"Board has {len(board)} rows, expected {self.board_size}")
             return False
         for row in board:
             if not isinstance(row, list) or len(row) != self.board_size:
-                print(f"Row has {len(row)} columns, expected {self.board_size}")
                 return False
         valid_values = {"yellow", "red", "empty", "block"}
-        for row in board:
-            for cell in row:
-                if cell not in valid_values:
-                    print(f"Invalid cell value: {cell}, expected one of {valid_values}")
-                    return False
-        return True
+        return all(cell in valid_values for row in board for cell in row)
+
+    def get_state_key(self) -> int:
+        """Tạo định danh duy nhất bằng Zobrist hashing."""
+        key = self.zobrist_player[self.current_player]
+        for r in range(self.board_size):
+            for c in range(self.board_size):
+                piece = self.board[r, c]
+                key ^= self.zobrist_table[r, c, piece]
+        return key
 
     def clone(self) -> 'AtaxxEnvironment':
-        return AtaxxEnvironment(copy.copy(self.board), self.current_player)
+        new_env = AtaxxEnvironment.__new__(AtaxxEnvironment)
+        new_env.board_size = self.board_size
+        new_env.max_move_distance = self.max_move_distance
+        new_env.neighbor_offsets = self.neighbor_offsets
+        new_env.player_map = self.player_map
+        new_env.zobrist_table = self.zobrist_table
+        new_env.zobrist_player = self.zobrist_player
+        new_env.board = self.board.copy()
+        new_env.current_player = self.current_player
+        return new_env
 
     def is_valid_position(self, row: int, col: int) -> bool:
         return 0 <= row < self.board_size and 0 <= col < self.board_size
 
     def is_valid_move(self, from_pos: Dict[str, int], to_pos: Dict[str, int]) -> bool:
         try:
-            from_row = from_pos.get("row")
-            from_col = from_pos.get("col")
-            to_row = to_pos.get("row")
-            to_col = to_pos.get("col")
-
-            if not all(isinstance(x, int) for x in [from_row, from_col, to_row, to_col]):
+            from_row, from_col = from_pos["row"], from_pos["col"]
+            to_row, to_col = to_pos["row"], to_pos["col"]
+            if not (self.is_valid_position(from_row, from_col) and self.is_valid_position(to_row, to_col)):
                 return False
-
-            if not self.is_valid_position(from_row, from_col) or not self.is_valid_position(to_row, to_col):
+            if (self.board[from_row, from_col] != self.current_player or
+                self.board[to_row, to_col] != Piece.EMPTY):
                 return False
-
-            if (self.board[from_row][from_col] != self.current_player or
-                    self.board[to_row][to_col] != "empty"):
-                return False
-
             row_diff = abs(from_row - to_row)
             col_diff = abs(from_col - to_col)
-            if row_diff > self.max_move_distance or col_diff > self.max_move_distance:
-                return False
-
-            return True
-        except (TypeError, KeyError) as e:
-            print(f"Invalid move format: from_pos={from_pos}, to_pos={to_pos}, error={str(e)}")
+            return row_diff <= self.max_move_distance and col_diff <= self.max_move_distance
+        except (TypeError, KeyError):
             return False
 
     def get_valid_moves(self) -> List[Dict[str, Any]]:
-        # Nếu cache tồn tại và hợp lệ, trả về cache
-        if self._valid_moves_cache is not None:
-            return self._valid_moves_cache
-        
         moves = []
-        # Duyệt các ô có quân của người chơi hiện tại
-        for from_row in range(self.board_size):
-            for from_col in range(self.board_size):
-                if self.board[from_row][from_col] != self.current_player:
-                    continue
-                # Chỉ kiểm tra các ô đích trong phạm vi max_move_distance
-                for dr in range(-self.max_move_distance, self.max_move_distance + 1):
-                    for dc in range(-self.max_move_distance, self.max_move_distance + 1):
-                        to_row = from_row + dr
-                        to_col = from_col + dc
-                        if not self.is_valid_position(to_row, to_col):
-                            continue
-                        move = {
-                            "from": {"row": from_row, "col": from_col},
-                            "to": {"row": to_row, "col": to_col}
-                        }
-                        if self.is_valid_move(move["from"], move["to"]):
-                            moves.append(move)
-
-        # Lưu vào cache
-        self._valid_moves_cache = moves
+        for r in range(self.board_size):
+            for c in range(self.board_size):
+                if self.board[r, c] == self.current_player:
+                    for dr in range(-self.max_move_distance, self.max_move_distance + 1):
+                        for dc in range(-self.max_move_distance, self.max_move_distance + 1):
+                            if dr == 0 and dc == 0:
+                                continue
+                            to_r, to_c = r + dr, c + dc
+                            if 0 <= to_r < self.board_size and 0 <= to_c < self.board_size:
+                                if self.board[to_r, to_c] == Piece.EMPTY:
+                                    moves.append({
+                                        "from": {"row": int(r), "col": int(c)},
+                                        "to": {"row": int(to_r), "col": int(to_c)}
+                                    })
         return moves
 
     def has_valid_moves(self, player: str) -> bool:
-        valid_moves = self.get_valid_moves()
-        return len(valid_moves) > 0
+        if player not in self.player_map:
+            return False
+        original_player = self.current_player
+        self.current_player = self.player_map[player]
+        moves = self.get_valid_moves()
+        self.current_player = original_player
+        return len(moves) > 0
 
     def make_move(self, from_pos: Dict[str, int], to_pos: Dict[str, int]) -> None:
-        from_row = from_pos.get("row")
-        from_col = from_pos.get("col")
-        to_row = to_pos.get("row")
-        to_col = to_pos.get("col")
-
-        if not all(isinstance(x, int) for x in [from_row, from_col, to_row, to_col]):
-            raise ValueError(f"Invalid move positions: from_pos={from_pos}, to_pos={to_pos}")
-
+        from_row, from_col = from_pos["row"], from_pos["col"]
+        to_row, to_col = to_pos["row"], to_pos["col"]
+        if not self.is_valid_move(from_pos, to_pos):
+            raise ValueError(f"Invalid move: from_pos={from_pos}, to_pos={to_pos}")
         row_diff = abs(from_row - to_row)
         col_diff = abs(from_col - to_col)
-
-        if row_diff <= 1 and col_diff <= 1:
-            self.board[to_row][to_col] = self.current_player
-        else:
-            self.board[from_row][from_col] = "empty"
-            self.board[to_row][to_col] = self.current_player
-
-        # Xóa cache sau khi thực hiện nước đi
-        self._valid_moves_cache = None
+        is_jump = row_diff > 1 or col_diff > 1
+        self.board[to_row, to_col] = self.current_player
+        if is_jump:
+            self.board[from_row, from_col] = Piece.EMPTY
         self.capture_neighbors(to_row, to_col)
+        self.current_player = Piece.RED if self.current_player == Piece.YELLOW else Piece.YELLOW
 
     def capture_neighbors(self, row: int, col: int) -> None:
+        opponent = Piece.RED if self.current_player == Piece.YELLOW else Piece.YELLOW
         for dr, dc in self.neighbor_offsets:
             nr, nc = row + dr, col + dc
-            if (self.is_valid_position(nr, nc) and
-                self.board[nr][nc] not in ["empty", "block", self.current_player]):
-                self.board[nr][nc] = self.current_player
+            if self.is_valid_position(nr, nc) and self.board[nr, nc] == opponent:
+                self.board[nr, nc] = self.current_player
 
     def calculate_scores(self) -> Dict[str, int]:
-        yellow_score = sum(row.count("yellow") for row in self.board)
-        red_score = sum(row.count("red") for row in self.board)
-        return {"yellowScore": yellow_score, "redScore": red_score}
+        yellow_score = np.sum(self.board == Piece.YELLOW)
+        red_score = np.sum(self.board == Piece.RED)
+        return {"yellowScore": int(yellow_score), "redScore": int(red_score)}
 
     def is_board_full(self) -> bool:
-        return all(cell != "empty" for row in self.board for cell in row)
+        return not np.any(self.board == Piece.EMPTY)
 
     def is_game_over(self) -> bool:
         scores = self.calculate_scores()
-        return (scores["yellowScore"] == 0 or scores["redScore"] == 0 or
-                self.is_board_full() or
-                (not self.has_valid_moves("yellow") and not self.has_valid_moves("red")))
-    
-    def get_cell(self, row, col):
-        if 0 <= row < 7 and 0 <= col < 7:
-            return self.board[row][col]
-        else:
-            return None  # Nếu ra ngoài phạm vi bảng, trả về None
+        if scores["yellowScore"] == 0 or scores["redScore"] == 0 or self.is_board_full():
+            return True
+        yellow_moves = self.has_valid_moves("yellow")
+        red_moves = self.has_valid_moves("red")
+        return not (yellow_moves or red_moves)
+
+    def get_cell(self, row: int, col: int) -> Any:
+        return self.board[row, col] if self.is_valid_position(row, col) else None
