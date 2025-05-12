@@ -1,0 +1,21 @@
+Test Results
+============
+
+MCTS simulations: 200
+Minimax depth: 2
+Games played: 1
+Total duration: 12.79 seconds
+Average move time: 0.51 seconds
+--------------------------------------------------
+MCTS simulations: 400
+Minimax depth: 2
+Games played: 1
+Total duration: 25.83 seconds
+Average move time: 1.03 seconds
+--------------------------------------------------
+MCTS simulations: 600
+Minimax depth: 2
+Games played: 1
+Total duration: 38.69 seconds
+Average move time: 1.55 seconds
+--------------------------------------------------
