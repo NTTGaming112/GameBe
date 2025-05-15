@@ -170,6 +170,11 @@ class MonteCarloBase:
         else:
             S1, S2, S3 = S1_base, S2_base, S3_base
         
+        # Make sure no simulation count is less than 1
+        S1 = max(1, S1)
+        S2 = max(1, S2)
+        S3 = max(1, S3)
+        
         return [S1, S2, S3]
     
     def get_play(self):

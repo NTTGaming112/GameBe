@@ -477,7 +477,12 @@ class Ataxx:
         Returns:
             float: Ratio of player's pieces to total board cells (0 to 1)
         """
-        return float(self.balls[player]) / (self.n_fields ** 2)
+        # Ensure we don't divide by zero
+        total_cells = self.n_fields ** 2
+        if total_cells == 0:
+            return 0.0
+            
+        return float(self.balls[player]) / total_cells
         
     def board_to_tuple(self):
         """Convert 2D board to a 1D tuple for dictionary storage.
