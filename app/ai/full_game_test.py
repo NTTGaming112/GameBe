@@ -10,7 +10,6 @@ This script allows for:
 import argparse
 import time
 import numpy as np
-import sys
 from app.ai.ataxx_state import Ataxx
 from app.ai.board import StateMinimax, Board
 from app.ai.minimax import minimax
@@ -31,13 +30,13 @@ def setup_half_filled_board():
     # For a 7x7 board, let's define a precise layout
     # 0 = empty, 1 = white, -1 = black
     board_layout = [
-        [ 1,  1,  1,  0, -1,  0, -1],
-        [ 1,  1,  1,  1,  0, -1, -1],
-        [ 1,  0,  1,  0, -1, -1,  0],
-        [ 1,  1,  1,  1,  0, -1, -1],
-        [ 0, -1, -1, -1,  0,  0,  1],
-        [-1, -1,  0, -1,  0,  1,  1],
-        [-1,  0,  0,  0,  1,  1,  1]
+        [ 1,  0,  0,  0,  0,  0, -1],
+        [ 0,  0,  0,  0,  0,  0,  0],
+        [ 0,  0,  0,  0,  0,  0,  0],
+        [ 0,  0,  0,  0,  0,  0,  0],
+        [ 0,  0,  0,  0,  0,  0,  0],
+        [ 0,  0,  0,  0,  0,  0,  0],
+        [-1,  0,  0,  0,  0,  0,  1],
     ]
     
     # Apply the layout to the game
@@ -62,7 +61,8 @@ def setup_half_filled_board():
     
     return game
 
-def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_threshold=31):
+def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_threshold=31,
+               s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5):
     """Get a move from the specified AI algorithm."""
     if algo_type == "Minimax":
         board = Board()
@@ -79,14 +79,18 @@ def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_th
             algo_type, 
             number_simulations=num_simulations,
             switch_threshold=switch_threshold,
-            use_simulation_formula=False
+            use_simulation_formula=False,
+            s1_ratio=s1_ratio,
+            s2_ratio=s2_ratio,
+            s3_ratio=s3_ratio
         )
         move = mc.get_play()
         elapsed = time.time() - start_time
         return move, elapsed
 
 def run_full_game(algo1="Minimax", algo2="MC", half_filled=True, max_moves=None, 
-                  depth_minimax=4, num_simulations=300, switch_threshold=31, verbose=True):
+                  depth_minimax=4, num_simulations=300, switch_threshold=31, 
+                  s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, verbose=True):
     """Run a full game between two AI algorithms."""
     # Set up the initial board
     if half_filled:
@@ -126,7 +130,10 @@ def run_full_game(algo1="Minimax", algo2="MC", half_filled=True, max_moves=None,
             algo, 
             depth_minimax=depth_minimax,
             num_simulations=num_simulations,
-            switch_threshold=switch_threshold
+            switch_threshold=switch_threshold,
+            s1_ratio=s1_ratio,
+            s2_ratio=s2_ratio,
+            s3_ratio=s3_ratio
         )
         
         # Record timing
@@ -187,7 +194,8 @@ def run_full_game(algo1="Minimax", algo2="MC", half_filled=True, max_moves=None,
     }
 
 def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", half_filled=True, max_moves=None,
-                       depth_minimax=4, num_simulations=300, switch_threshold=31, verbose=True):
+                       depth_minimax=4, num_simulations=300, switch_threshold=31, 
+                       s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, verbose=True):
     """Run multiple games between two AI algorithms and collect statistics."""
     print(f"\n=== Running {num_games} games: {algo1} vs {algo2} ===")
     print(f"Settings:")
@@ -195,6 +203,7 @@ def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", half_filled=Tru
     print(f"- Max moves per game: {'Unlimited' if max_moves is None else max_moves}")
     print(f"- Minimax depth: {depth_minimax}")
     print(f"- Simulations per move: {num_simulations}")
+    print(f"- Tournament sizes ratio (S1:S2:S3): {s1_ratio}:{s2_ratio}:{s3_ratio}")
     print(f"- Switch threshold: {switch_threshold}\n")
     
     # Collect statistics
@@ -227,6 +236,9 @@ def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", half_filled=Tru
             depth_minimax=depth_minimax,
             num_simulations=num_simulations,
             switch_threshold=switch_threshold,
+            s1_ratio=s1_ratio,
+            s2_ratio=s2_ratio,
+            s3_ratio=s3_ratio,
             verbose=verbose
         )
         
@@ -305,6 +317,12 @@ if __name__ == "__main__":
                     help='Number of simulations per move for Monte Carlo')
     parser.add_argument('--threshold', type=int, default=31,
                     help='Threshold for AB+MCD algorithm')
+    parser.add_argument('--s1-ratio', type=float, default=1.0,
+                    help='Ratio of S1 simulations to basic simulations')
+    parser.add_argument('--s2-ratio', type=float, default=1.0,
+                    help='Ratio of S2 simulations to basic simulations')
+    parser.add_argument('--s3-ratio', type=float, default=0.5,
+                    help='Ratio of S3 simulations to basic simulations')
     parser.add_argument('--verbose', action='store_true', default=True,
                     help='Print detailed game information')
     
@@ -319,5 +337,8 @@ if __name__ == "__main__":
         depth_minimax=args.depth,
         num_simulations=args.simulations,
         switch_threshold=args.threshold,
+        s1_ratio=args.s1_ratio,
+        s2_ratio=args.s2_ratio,
+        s3_ratio=args.s3_ratio,
         verbose=args.verbose
     )
