@@ -1,111 +1,119 @@
 
+# Constants
+BOARD_SIZE = 7  # Board dimension
+BOARD_TOTAL_CELLS = BOARD_SIZE * BOARD_SIZE  # Total number of cells (7x7 = 49)
+WIN_BONUS_FULL_BOARD = 50  # Bonus for winning on a full board
+WIN_BONUS_EARLY = 500  # Bonus for winning before board is full
+MOVE_WEIGHTS = {
+    "capture": 1.0,  # s1: Weight for captured opponent pieces
+    "target_surroundings": 0.4,  # s2: Weight for own pieces around target
+    "clone_bonus": 0.7,  # s3: Bonus for clone moves
+    "jump_penalty": 0.4   # s4: Penalty for leaving own pieces around jump source
+}
+ADJACENT_POSITIONS = [(-1,1),(0,1),(1,1),(-1,0),(1,0),(-1,-1),(0,-1),(1,-1)]
+
 def minimax(board, state, depth_minimax=4):
-    """Alpha-Beta Minimax với move ordering nâng cao.
-    - Mặc định: 4 ply
-    - Khi còn 5 ô trống: 5 ply
-    - Khi còn 2 ô trống: 6 ply
+    """Alpha-Beta Minimax with advanced move ordering.
     
-    Tối ưu hóa:
-    - Move ordering: sắp xếp theo công thức Si = s1·(số quân địch bị chiếm) + s2·(số quân ta xung quanh ô đích)
-      + s3·1{Clone} − s4·(số quân ta quanh ô nguồn nếu Jump), với (s1,s2,s3,s4)=(1.0,0.4,0.7,0.4)
-    - Iterative deepening: tăng dần độ sâu tìm kiếm
-    - Heuristic thống nhất: E(p) = Nown - Nopp + (50 hoặc 500 khi thắng/thua)
-      (dùng chung với Monte Carlo, Alpha-Beta đánh giá sau n nước, Monte Carlo đánh giá khi game kết thúc)
+    Arguments:
+        board: Game board instance
+        state: Current game state
+        depth_minimax: Maximum search depth (default: 4 ply)
+    
+    Optimizations:
+        - Move ordering: prioritizes moves based on capturing, surroundings and move type
+        - Iterative deepening: gradually increases search depth
+        - Unified evaluation function across different AI implementations
+        
+    Returns:
+        Best move found by the algorithm
     """
     
     def evaluate_position(state):
-        """Hàm đánh giá đơn giản E(p) = Nown - Nopp + giá trị thắng/thua."""
+        """Evaluates board position using formula: E(p) = Nown - Nopp + win/loss bonus."""
         player = state.player
         opponent = -player
         
-        # Trường hợp đặc biệt để tránh chia cho 0
+        # Special case to avoid division by zero
         if state.balls[player] + state.balls[opponent] == 0:
             return 0
             
-        # Đếm số quân của mỗi bên
+        # Count pieces for each player
         num_own = state.balls[player]
         num_opp = state.balls[opponent]
+        score_diff = num_own - num_opp
         
-        # Nếu trò chơi đã kết thúc
+        # Game over evaluation with win/loss bonuses
         if board.is_gameover(state):
-            if num_own > num_opp:  # Thắng
-                # Kiểm tra nếu bàn đầy hoặc chưa đầy
+            if num_own > num_opp:  # Win
                 total_pieces = num_own + num_opp
-                empty_spaces = 49 - total_pieces  # Bàn cờ 7x7 có 49 ô
-                if empty_spaces == 0:  # Bàn đầy
-                    return num_own - num_opp + 50
-                else:  # Thắng trước khi bàn đầy
-                    return num_own - num_opp + 500
-            elif num_own < num_opp:  # Thua
+                is_full_board = (total_pieces == BOARD_TOTAL_CELLS)
+                return score_diff + (WIN_BONUS_FULL_BOARD if is_full_board else WIN_BONUS_EARLY)
+            elif num_own < num_opp:  # Loss
                 total_pieces = num_own + num_opp
-                empty_spaces = 49 - total_pieces
-                if empty_spaces == 0:  # Bàn đầy
-                    return num_own - num_opp - 50
-                else:  # Thua trước khi bàn đầy
-                    return num_own - num_opp - 500
-            else:  # Hòa
+                is_full_board = (total_pieces == BOARD_TOTAL_CELLS)
+                return score_diff - (WIN_BONUS_FULL_BOARD if is_full_board else WIN_BONUS_EARLY)
+            else:  # Draw
                 return 0
         
-        # Đánh giá đơn giản: chỉ dựa trên số quân hiện tại
-        score = num_own - num_opp
+        # Basic evaluation for non-terminal positions
+        return score_diff
+    
+    def count_adjacent_pieces(position, state, player):
+        """Counts player's pieces adjacent to the given position."""
+        count = 0
+        for dx, dy in ADJACENT_POSITIONS:
+            x, y = position[0] + dx, position[1] + dy
+            if 0 <= x < BOARD_SIZE and 0 <= y < BOARD_SIZE and state.board[x][y] == player:
+                count += 1
+        return count
+    
+    def order_moves(moves, state):
+        """Orders moves using heuristic scoring for better pruning efficiency."""
+        ordered_moves = []
         
-        return score
+        for move in moves:
+            # Simulate move to count captured pieces
+            next_state = board.next_state(state, move)
+            stones_taken = next_state.balls[state.player] - state.balls[state.player]
+            
+            # Determine move type (Clone or Jump)
+            is_clone = move[0] == 'c'
+            target_pos = move[1]
+            
+            # Count player pieces around target position
+            own_stones_around_target = count_adjacent_pieces(target_pos, state, state.player)
+            
+            # Calculate move score
+            move_score = (MOVE_WEIGHTS["capture"] * stones_taken + 
+                          MOVE_WEIGHTS["target_surroundings"] * own_stones_around_target)
+            
+            if is_clone:
+                move_score += MOVE_WEIGHTS["clone_bonus"]
+            else:  # Jump move
+                source_pos = move[2]
+                own_stones_around_source = count_adjacent_pieces(source_pos, state, state.player)
+                move_score -= MOVE_WEIGHTS["jump_penalty"] * own_stones_around_source
+            
+            # Ensure non-negative score
+            move_score = max(0, move_score)
+            ordered_moves.append((move, move_score))
+        
+        # Sort moves by score (highest first)
+        return sorted(ordered_moves, key=lambda x: x[1], reverse=True)
             
     def max_value(state, depth, alpha, beta):
-        """Chọn nước đi tốt nhất cho người chơi hiện tại (max)."""
-        # Điều kiện dừng
+        """Maximizing player function for minimax algorithm."""
+        # Terminal conditions
         if depth == 0 or board.is_gameover(state):
             return evaluate_position(state), None
             
         moves = board.legal_plays(state)
         if not moves:
             return evaluate_position(state), None
-            
-        # Đánh giá và sắp xếp nước đi theo công thức heuristic mới
-        # Si = + s1 · (số quân địch bị chiếm) + s2 · (số quân ta xung quanh ô đích)
-        #     + s3 · 1{Clone} − s4 · (số quân ta quanh ô nguồn nếu Jump)
-        s1, s2, s3, s4 = 1.0, 0.4, 0.7, 0.4
-        ordered_moves = []
-        for move in moves:
-            # Mô phỏng nước đi để đếm quân bị lật
-            next_state = board.next_state(state, move)
-            stones_taken = next_state.balls[state.player] - state.balls[state.player]
-            
-            # Xác định loại nước đi (Clone hay Jump)
-            is_clone = move[0] == 'c'
-            
-            # Đếm số quân ta xung quanh ô đích
-            target_pos = move[1]
-            own_stones_around_target = 0
-            pos_around = [(-1,1),(0,1),(1,1),(-1,0),(1,0),(-1,-1),(0,-1),(1,-1)]
-            for dx, dy in pos_around:
-                x, y = target_pos[0] + dx, target_pos[1] + dy
-                if 0 <= x < 7 and 0 <= y < 7 and state.board[x][y] == state.player:
-                    own_stones_around_target += 1
-            
-            # Đếm số quân ta xung quanh ô nguồn (nếu là Jump)
-            own_stones_around_source = 0
-            if not is_clone:  # Nếu là Jump
-                source_pos = move[2]
-                for dx, dy in pos_around:
-                    x, y = source_pos[0] + dx, source_pos[1] + dy
-                    if 0 <= x < 7 and 0 <= y < 7 and state.board[x][y] == state.player:
-                        own_stones_around_source += 1
-            
-            # Tính điểm cho nước đi theo công thức
-            move_score = (s1 * stones_taken) + (s2 * own_stones_around_target)
-            if is_clone:
-                move_score += s3
-            else:
-                move_score -= s4 * own_stones_around_source
-            
-            # Đảm bảo điểm không âm
-            move_score = max(0, move_score)
-            
-            ordered_moves.append((move, move_score))
-            
-        # Sắp xếp giảm dần theo điểm đánh giá nước đi
-        ordered_moves.sort(key=lambda x: x[1], reverse=True)
+        
+        # Order moves for better pruning efficiency
+        ordered_moves = order_moves(moves, state)
         
         best_score = float('-inf')
         best_move = None
@@ -125,8 +133,8 @@ def minimax(board, state, depth_minimax=4):
         return best_score, best_move
 
     def min_value(state, depth, alpha, beta):
-        """Chọn nước đi tốt nhất cho đối thủ (min)."""
-        # Điều kiện dừng: đạt độ sâu tối đa hoặc trò chơi kết thúc
+        """Minimizing player function for minimax algorithm."""
+        # Terminal conditions
         if depth == 0 or board.is_gameover(state):
             return evaluate_position(state), None
             
@@ -134,51 +142,8 @@ def minimax(board, state, depth_minimax=4):
         if not moves:
             return evaluate_position(state), None
         
-        # Đánh giá và sắp xếp nước đi theo công thức heuristic mới
-        # Si = + s1 · (số quân địch bị chiếm) + s2 · (số quân ta xung quanh ô đích)
-        #     + s3 · 1{Clone} − s4 · (số quân ta quanh ô nguồn nếu Jump)
-        s1, s2, s3, s4 = 1.0, 0.4, 0.7, 0.4
-        ordered_moves = []
-        for move in moves:
-            # Mô phỏng nước đi để đếm quân bị lật
-            next_state = board.next_state(state, move)
-            stones_taken = next_state.balls[state.player] - state.balls[state.player]
-            
-            # Xác định loại nước đi (Clone hay Jump)
-            is_clone = move[0] == 'c'
-            
-            # Đếm số quân ta xung quanh ô đích
-            target_pos = move[1]
-            own_stones_around_target = 0
-            pos_around = [(-1,1),(0,1),(1,1),(-1,0),(1,0),(-1,-1),(0,-1),(1,-1)]
-            for dx, dy in pos_around:
-                x, y = target_pos[0] + dx, target_pos[1] + dy
-                if 0 <= x < 7 and 0 <= y < 7 and state.board[x][y] == state.player:
-                    own_stones_around_target += 1
-            
-            # Đếm số quân ta xung quanh ô nguồn (nếu là Jump)
-            own_stones_around_source = 0
-            if not is_clone:  # Nếu là Jump
-                source_pos = move[2]
-                for dx, dy in pos_around:
-                    x, y = source_pos[0] + dx, source_pos[1] + dy
-                    if 0 <= x < 7 and 0 <= y < 7 and state.board[x][y] == state.player:
-                        own_stones_around_source += 1
-            
-            # Tính điểm cho nước đi theo công thức
-            move_score = (s1 * stones_taken) + (s2 * own_stones_around_target)
-            if is_clone:
-                move_score += s3
-            else:
-                move_score -= s4 * own_stones_around_source
-            
-            # Đảm bảo điểm không âm
-            move_score = max(0, move_score)
-            
-            ordered_moves.append((move, move_score))
-        
-        # Sắp xếp giảm dần theo điểm đánh giá nước đi
-        ordered_moves.sort(key=lambda x: x[1], reverse=True)
+        # Order moves for better pruning efficiency
+        ordered_moves = order_moves(moves, state)
         
         best_score = float('inf')
         best_move = None
@@ -193,23 +158,23 @@ def minimax(board, state, depth_minimax=4):
                 
             beta = min(beta, best_score)
             if beta <= alpha:
-                break  # Cắt tỉa Alpha
+                break  # Alpha cutoff
                 
         return best_score, best_move
 
-    # Tính số ô trống trên bàn cờ
+    # Dynamic depth adjustment based on game state
     total_pieces = state.balls[1] + state.balls[-1]
-    empty_spaces = 49 - total_pieces  # Bàn cờ 7x7 có 49 ô
+    empty_spaces = BOARD_TOTAL_CELLS - total_pieces
     
-    # Điều chỉnh độ sâu dựa trên số ô trống
+    # Choose search depth based on game progression
     if empty_spaces <= 2:
-        max_depth = 6  # 6 ply khi còn 2 ô trống hoặc ít hơn
+        max_depth = 6  # 6-ply when 2 or fewer empty spaces
     elif empty_spaces <= 5:
-        max_depth = 5  # 5 ply khi còn 3-5 ô trống
+        max_depth = 5  # 5-ply when 3-5 empty spaces
     else:
-        max_depth = min(depth_minimax, 4)  # Mặc định là 4 ply
+        max_depth = min(depth_minimax, 4)  # Default: 4-ply
     
-    # Áp dụng iterative deepening để có kết quả nhanh hơn
+    # Apply iterative deepening for faster results on shallow depths
     best_move = None
     for current_depth in range(1, max_depth + 1):
         _, move = max_value(state, current_depth, float('-inf'), float('inf'))

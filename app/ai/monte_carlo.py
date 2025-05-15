@@ -1,53 +1,68 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Monte Carlo module for Ataxx AI
-Provides factory function for creating Monte Carlo based players
+Monte Carlo module for Ataxx AI.
+
+This module provides a factory function to create different types of
+Monte Carlo-based AI players for the Ataxx game.
 """
 from .monte_carlo_base import MonteCarloBase
 from .monte_carlo_domain import MonteCarloDomain
 from .alpha_beta_monte_carlo import AlphaBetaMonteCarlo
 
-def get_monte_carlo_player(game_state, mc_type="MC", number_simulations=600, 
-                      switch_threshold=31, use_simulation_formula=False,
-                      s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5):
-    """Factory function để tạo player Monte Carlo theo loại thuật toán.
+# Monte Carlo algorithm types
+MC_TYPE_BASIC = "MC"           # Basic Monte Carlo Tree Search
+MC_TYPE_DOMAIN = "MCD"         # Monte Carlo with Domain Knowledge
+MC_TYPE_ALPHA_BETA = "AB+MCD"  # Hybrid: Alpha-Beta + Monte Carlo Domain
+
+def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations=600,
+                          switch_threshold=31, use_simulation_formula=False,
+                          s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5):
+    """Factory function to create Monte Carlo-based AI players.
+    
+    This function creates different types of Monte Carlo AI players based on the
+    specified parameters.
     
     Args:
-        game_state: Trạng thái game hiện tại
-        mc_type: Loại Monte Carlo ("MC", "MCD", "AB+MCD")
-        number_simulations: Số mô phỏng cơ bản (Sbasic ∈ {300, 600, 1200})
-        switch_threshold: Ngưỡng chuyển đổi cho AB+MCD
-        use_simulation_formula: Có sử dụng công thức Stotal = Sbasic * (1 + 0.1 * nfilled) hay không
-        s1_ratio: Tỷ lệ số mô phỏng S1 so với number_simulations (mặc định: 1.0)
-        s2_ratio: Tỷ lệ số mô phỏng S2 so với number_simulations (mặc định: 1.0)
-        s3_ratio: Tỷ lệ số mô phỏng S3 so với number_simulations (mặc định: 0.5)
+        game_state: Current game state
+        mc_type: Monte Carlo algorithm type (MC_TYPE_BASIC, MC_TYPE_DOMAIN, MC_TYPE_ALPHA_BETA)
+        number_simulations: Base simulation count (Sbasic ∈ {300, 600, 1200})
+        switch_threshold: Switch threshold for hybrid algorithm (AB+MCD)
+        use_simulation_formula: Whether to use Stotal = Sbasic * (1 + 0.1 * nfilled)
+        s1_ratio: Ratio of S1 simulations to number_simulations (default: 1.0)
+        s2_ratio: Ratio of S2 simulations to number_simulations (default: 1.0)
+        s3_ratio: Ratio of S3 simulations to number_simulations (default: 0.5)
         
     Returns:
-        Instance của thuật toán Monte Carlo
+        An instance of the appropriate Monte Carlo algorithm
     """
-
-        
+    # Common configuration parameters
     kwargs = {
         'basic_simulations': number_simulations,
-        'switch_threshold': switch_threshold
+        'switch_threshold': switch_threshold,
+        'use_simulation_formula': use_simulation_formula
     }
     
-    if mc_type == "MCD":
-        # Tính S1, S2, S3 dựa trên Sbasic và tỷ lệ được chỉ định
-        # Ví dụ: Nếu Sbasic = 600, s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5
+    if mc_type == MC_TYPE_DOMAIN:
+        # Monte Carlo with Domain Knowledge
+        # Calculate S1, S2, S3 based on Sbasic and specified ratios
+        # Example: If Sbasic = 600, s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5
         # => (S1, S2, S3) = (600, 600, 300)
         S1 = int(number_simulations * s1_ratio)
         S2 = int(number_simulations * s2_ratio)
         S3 = int(number_simulations * s3_ratio)
         kwargs['tournament_sizes'] = [S1, S2, S3]
-        kwargs['use_simulation_formula'] = use_simulation_formula
         return MonteCarloDomain(game_state, **kwargs)
-    elif mc_type == "MC":
-        kwargs['use_simulation_formula'] = use_simulation_formula
-        return MonteCarloBase(game_state, **kwargs)
-    elif mc_type == "AB+MCD":
-        kwargs['use_simulation_formula'] = use_simulation_formula
+    
+    elif mc_type == MC_TYPE_ALPHA_BETA:
+        # Hybrid: Alpha-Beta + Monte Carlo Domain
+        S1 = int(number_simulations * s1_ratio)
+        S2 = int(number_simulations * s2_ratio)
+        S3 = int(number_simulations * s3_ratio)
+        kwargs['tournament_sizes'] = [S1, S2, S3]
         return AlphaBetaMonteCarlo(game_state, **kwargs)
+    
     else:
-        raise ValueError(f"Unknown Monte Carlo type: {mc_type}")
+        # Default: Basic Monte Carlo Tree Search
+        return MonteCarloBase(game_state, **kwargs)
+

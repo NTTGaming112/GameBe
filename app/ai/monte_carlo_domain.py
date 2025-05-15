@@ -1,35 +1,62 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+Domain Knowledge-enhanced Monte Carlo for Ataxx AI.
+
+This module extends the basic Monte Carlo approach by incorporating domain knowledge
+via tournament layering and probability-based move selection during rollouts.
+"""
 import random
 from copy import deepcopy
 from .monte_carlo_base import MonteCarloBase
 
 class MonteCarloDomain(MonteCarloBase):
-    """Monte Carlo với Domain Knowledge."""
+    """Monte Carlo with Domain Knowledge.
+    
+    This class implements an enhanced Monte Carlo algorithm that uses domain knowledge
+    to improve move selection in both the tree search and simulation phases.
+    """
     def __init__(self, state, **kwargs):
+        """Initialize Monte Carlo with Domain Knowledge player.
+        
+        Args:
+            state: Initial game state
+            **kwargs: Configuration parameters including:
+                - tournament_rounds: Number of tournament rounds (default: 3)
+                - tournament_sizes: List of simulation counts [S1, S2, S3] for each round
+                  Default is [600, 600, 300]
+        """
         # Tournament parameters
         self.tournament_rounds = kwargs.get('tournament_rounds', 3)
-        # Mặc định (S1, S2, S3) = (600, 600, 300)
+        # Default (S1, S2, S3) = (600, 600, 300)
         self.tournament_sizes = kwargs.get('tournament_sizes', [600, 600, 300])
         super().__init__(state, **kwargs)
         
     def get_move(self):
-        """Sử dụng Tournament Layering để chọn nước đi tốt nhất."""
+        """Use Tournament Layering to select the best move.
+        
+        Tournament Layering is a technique where moves are filtered through
+        multiple rounds of evaluation, with each round using more simulations
+        for a smaller set of candidate moves.
+        
+        Returns:
+            Move: Best move found, or None if no legal moves
+        """
         moves = self.root_state.get_all_possible_moves()
         if not moves or len(moves) == 1:
             return moves[0] if moves else None
             
-        # Cấu hình Tournament Layering
-        k1 = min(5, len(moves))       # Số nước giữ lại sau vòng 1
-        k2 = min(3, k1)               # Số nước giữ lại sau vòng 2
+        # Tournament Layering configuration
+        k1 = min(5, len(moves))       # Number of moves to keep after round 1
+        k2 = min(3, k1)               # Number of moves to keep after round 2
         
-        # Tính số lượng mô phỏng cho mỗi vòng tournament
-        # S1, S2, S3 phụ thuộc vào use_simulation_formula
+        # Calculate simulation counts for each tournament round
+        # S1, S2, S3 depend on use_simulation_formula
         tournament_sizes = self.calculate_tournament_simulations(self.root_state)
-        S1, S2, S3 = tournament_sizes  # Số mô phỏng mỗi vòng
+        S1, S2, S3 = tournament_sizes  # Simulations per round
         
-        # Vòng 1: Mô phỏng S1 rollout cho mỗi nước đi
-        print(f"Tournament vòng 1: Đánh giá {len(moves)} nước với {S1} mô phỏng mỗi nước")
+        # Round 1: Run S1 rollouts for each move
+        print(f"Tournament round 1: Evaluating {len(moves)} moves with {S1} simulations each")
         move_scores = []
         for move in moves:
             next_state = deepcopy(self.root_state)
@@ -38,14 +65,14 @@ class MonteCarloDomain(MonteCarloBase):
             score = self._evaluate_move(next_state, S1)
             move_scores.append((move, score))
         
-        # Sắp xếp và chọn k1 nước đi tốt nhất
+        # Sort and select top k1 moves
         move_scores.sort(key=lambda x: x[1], reverse=True)
         candidates = move_scores[:k1]
-        print(f"Kết quả vòng 1: Chọn {len(candidates)} nước đi tốt nhất")
+        print(f"Round 1 results: Selected top {len(candidates)} moves")
         
-        # Vòng 2: Mô phỏng thêm S2 rollout cho top k1 nước
+        # Round 2: Run S2 additional rollouts for top k1 moves
         if len(candidates) > 1:
-            print(f"Tournament vòng 2: Đánh giá {len(candidates)} nước với {S2} mô phỏng mỗi nước")
+            print(f"Tournament round 2: Evaluating {len(candidates)} moves with {S2} simulations each")
             new_scores = []
             
             for move, prev_score in candidates:
@@ -58,11 +85,11 @@ class MonteCarloDomain(MonteCarloBase):
             
             new_scores.sort(key=lambda x: x[1], reverse=True)
             candidates = new_scores[:k2]
-            print(f"Kết quả vòng 2: Chọn {len(candidates)} nước đi tốt nhất")
+            print(f"Round 2 results: Selected top {len(candidates)} moves")
         
-        # Vòng 3: Mô phỏng thêm S3 rollout cho top k2 nước
+        # Round 3: Run S3 additional rollouts for top k2 moves
         if len(candidates) > 1:
-            print(f"Tournament vòng 3: Đánh giá {len(candidates)} nước với {S3} mô phỏng mỗi nước")
+            print(f"Tournament round 3: Evaluating {len(candidates)} moves with {S3} simulations each")
             final_scores = []
             
             for move, prev_score in candidates:
@@ -76,13 +103,20 @@ class MonteCarloDomain(MonteCarloBase):
             final_scores.sort(key=lambda x: x[1], reverse=True)
             candidates = final_scores
         
-        # Trả về nước đi tốt nhất
+        # Return the best move
         best_move = candidates[0][0]
-        print(f"Kết quả cuối cùng: Chọn nước đi với điểm số {candidates[0][1]:.4f}")
+        print(f"Final result: Selected move with score {candidates[0][1]:.4f}")
         return best_move
-        
     def _evaluate_move(self, state, simulations):
-        """Đánh giá nước đi bằng Monte Carlo kết hợp domain knowledge."""
+        """Evaluate a move using Monte Carlo with domain knowledge.
+        
+        Args:
+            state: State after applying the move
+            simulations: Number of simulations to run
+            
+        Returns:
+            float: Win ratio (0 to 1)
+        """
         wins = 0
         for _ in range(simulations):
             result = self._simulate_with_domain_knowledge(state)
@@ -90,7 +124,14 @@ class MonteCarloDomain(MonteCarloBase):
         return wins / simulations
         
     def _simulate_with_domain_knowledge(self, state):
-        """Mô phỏng với domain knowledge và phân phối xác suất."""
+        """Simulate with domain knowledge and probability distribution.
+        
+        Args:
+            state: Starting game state for simulation
+            
+        Returns:
+            float: Evaluation score in [0, 1] range
+        """
         state = deepcopy(state)
         player = state.current_player()
         
@@ -98,30 +139,38 @@ class MonteCarloDomain(MonteCarloBase):
             moves = state.get_all_possible_moves()
             if not moves:
                 break
-                
-            # Áp dụng domain knowledge và phân phối xác suất để chọn nước đi
+            
+            # Apply domain knowledge and probability distribution to select move
             move = self._select_move_with_probability_distribution(state, moves)
             state.move_with_position(move)
             state.toggle_player()
         
-        # Đánh giá kết quả với hàm đánh giá thống nhất
+        # Evaluate result with unified evaluation function
         return self._evaluate_final_position(state, player)
         
     def _select_move_with_probability_distribution(self, state, moves):
-        """Chọn nước đi dựa trên phân phối xác suất P(m_i) = S_i^2 / ∑_j=1^M S_j^2."""
+        """Select a move based on probability distribution P(m_i) = S_i^2 / ∑_j=1^M S_j^2.
+        
+        Args:
+            state: Current game state
+            moves: List of legal moves
+            
+        Returns:
+            Move: Selected move based on probability distribution
+        """
         if not moves:
             return None
         
-        # Tính điểm và bình phương cho mỗi nước đi
+        # Calculate score and square for each move
         scored_moves = [(move, self._score_move(state, move)) for move in moves]
         scores_squared = [score**2 for _, score in scored_moves]
         sum_scores_squared = sum(scores_squared)
         
-        # Xử lý trường hợp tất cả điểm đều bằng 0
+        # Handle case where all scores are 0
         if sum_scores_squared == 0:
             return random.choice(moves)
         
-        # Chọn nước đi ngẫu nhiên dựa trên phân phối xác suất
+        # Select a move randomly based on probability distribution
         r = random.random() * sum_scores_squared
         current_sum = 0
         for i, score_squared in enumerate(scores_squared):
@@ -132,41 +181,49 @@ class MonteCarloDomain(MonteCarloBase):
         return scored_moves[-1][0]
     
     def _score_move(self, state, move):
-        """Đánh giá một nước đi dựa trên heuristics.
-        Si = s1·(số quân địch bị chiếm) + s2·(số quân ta xung quanh ô đích) 
-           + s3·1{Clone} − s4·(số quân ta quanh ô nguồn nếu Jump)
+        """Score a move based on heuristics.
+        
+        Formula: Si = s1·(opponent pieces captured) + s2·(own pieces around destination) 
+               + s3·1{Clone} − s4·(own pieces around source if Jump)
+        
+        Args:
+            state: Current game state
+            move: Move to evaluate
+            
+        Returns:
+            float: Heuristic score for the move
         """
         player = state.current_player()
-        s1, s2, s3, s4 = 1.0, 0.4, 0.7, 0.4  # Trọng số heuristic
+        s1, s2, s3, s4 = 1.0, 0.4, 0.7, 0.4  # Heuristic weights
         
-        # Tạo trạng thái mới và tính số quân bị chiếm
+        # Create new state and calculate captures
         next_state = deepcopy(state)
         next_state.move_with_position(move)
         captures = state.balls[-player] - next_state.balls[-player]
         
-        # Xác định loại nước đi và các vị trí
+        # Determine move type and positions
         if move[0] == 'c':  # Clone
             dest_x, dest_y = move[1]
             is_clone = 1
             adjacent_friendly_pieces_source = 0
         else:  # Jump
-            source_x, source_y = move[1]
-            dest_x, dest_y = move[2]
+            dest_x, dest_y = move[1]
+            source_x, source_y = move[2]
             is_clone = 0
             
-            # Đếm quân ta xung quanh ô nguồn
+            # Count friendly pieces around source
             adjacent_friendly_pieces_source = sum(1 for dx in [-1, 0, 1] for dy in [-1, 0, 1] 
                                               if (dx != 0 or dy != 0) and 0 <= source_x + dx < 7 
                                               and 0 <= source_y + dy < 7 
                                               and state.board[source_x + dx][source_y + dy] == player)
         
-        # Đếm quân ta xung quanh ô đích
+        # Count friendly pieces around destination
         adjacent_friendly_pieces_dest = sum(1 for dx in [-1, 0, 1] for dy in [-1, 0, 1] 
                                         if (dx != 0 or dy != 0) and 0 <= dest_x + dx < 7 
                                         and 0 <= dest_y + dy < 7 
                                         and next_state.board[dest_x + dx][dest_y + dy] == player)
         
-        # Tính điểm theo công thức và đảm bảo không âm
+        # Calculate score according to formula and ensure non-negative
         score = (s1 * captures + s2 * adjacent_friendly_pieces_dest + 
                 s3 * is_clone - s4 * adjacent_friendly_pieces_source)
         

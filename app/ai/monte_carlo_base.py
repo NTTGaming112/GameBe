@@ -1,23 +1,47 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+Monte Carlo Tree Search base implementation for Ataxx AI.
+
+This module provides the core Monte Carlo Tree Search algorithm with random rollouts,
+which serves as the foundation for more advanced Monte Carlo variants.
+"""
 import random
 import math
 import time
 from copy import deepcopy
 
 class MonteCarloNode:
-    """Lớp nút cơ bản cho cây Monte Carlo."""
+    """Base node class for Monte Carlo Tree Search.
+    
+    This class represents a node in the Monte Carlo search tree, containing
+    the game state, statistics, and links to parent and children nodes.
+    """
     def __init__(self, state, parent=None, move=None):
+        """Initialize a Monte Carlo search tree node.
+        
+        Args:
+            state: Game state at this node
+            parent: Parent node (None for root)
+            move: Move that led to this state
+        """
         self.state = deepcopy(state)
         self.parent = parent
-        self.move = move  # Nước đi dẫn đến trạng thái này
+        self.move = move  # Move that led to this state
         self.children = []
         self.wins = 0
         self.visits = 0
         self.untried_moves = state.get_all_possible_moves() if not state.is_game_over() else []
         
     def uct_value(self, c=1.414):
-        """Tính giá trị UCT (Upper Confidence Bound applied to Trees)."""
+        """Calculate UCT (Upper Confidence Bound applied to Trees) value.
+        
+        Args:
+            c: Exploration parameter (default: sqrt(2))
+            
+        Returns:
+            float: UCT value of this node
+        """
         if self.visits == 0:
             return float('inf')
         
@@ -26,11 +50,19 @@ class MonteCarloNode:
         return exploitation + exploration
     
     def select_child(self):
-        """Chọn nút con có giá trị UCT cao nhất."""
+        """Select child with highest UCT value.
+        
+        Returns:
+            MonteCarloNode: Child node with highest UCT value
+        """
         return max(self.children, key=lambda c: c.uct_value())
     
     def expand(self):
-        """Mở rộng cây tìm kiếm bằng cách tạo nút con mới."""
+        """Expand the search tree by creating a new child node.
+        
+        Returns:
+            MonteCarloNode: Newly created child node, or None if no untried moves
+        """
         if not self.untried_moves:
             return None
         
@@ -44,13 +76,32 @@ class MonteCarloNode:
         return child
     
     def update(self, result):
-        """Cập nhật số lần thắng và số lần thăm."""
+        """Update node statistics after a simulation.
+        
+        Args:
+            result: Simulation result (typically 0 or 1)
+        """
         self.visits += 1
         self.wins += result
 
 class MonteCarloBase:
-    """Monte Carlo cơ bản - rollout ngẫu nhiên, không kiến thức."""
+    """Basic Monte Carlo Tree Search with random rollouts.
+    
+    This class implements the basic Monte Carlo Tree Search algorithm
+    using pure random rollouts without domain-specific knowledge.
+    """
     def __init__(self, state, **kwargs):
+        """Initialize Basic Monte Carlo player.
+        
+        Args:
+            state: Initial game state
+            **kwargs: Configuration parameters including:
+                - basic_simulations: Base number of simulations (default: 300)
+                - exploration: Exploration parameter (default: 1.414)
+                - max_time: Maximum search time in seconds (default: 1.0)
+                - tournament_sizes: Tournament simulation sizes (default: [600, 600, 300])
+                - use_simulation_formula: Whether to use simulation scaling (default: True)
+        """
         self.root_state = state
         self.basic_simulations = kwargs.get('basic_simulations', 300)
         self.exploration = kwargs.get('exploration', 1.414)
@@ -59,80 +110,99 @@ class MonteCarloBase:
         self.use_simulation_formula = kwargs.get('use_simulation_formula', True)
         
     def calculate_simulations(self, state):
-        """Tính số lượng mô phỏng dựa trên công thức Stotal = Sbasic * (1 + 0.1 * nfilled).
+        """Calculate number of simulations based on board state.
         
-        Formula tăng số rollout khi bàn sắp kín.
-        Với Sbasic = {300, 600, 1200} tùy theo cấu hình.
+        Uses formula Stotal = Sbasic * (1 + 0.1 * nfilled) which increases
+        rollouts as the board fills up.
         
-        Ví dụ:
-        - Với Sbasic=300, bàn trống: 300 simulations
-        - Với Sbasic=300, bàn đầy 1/2: 300 * (1 + 0.1*24.5) ≈ 345 simulations
-        - Với Sbasic=300, bàn đầy: 300 * (1 + 0.1*49) = 447 simulations
+        With Sbasic = {300, 600, 1200} depending on configuration.
+        
+        Examples:
+        - With Sbasic=300, empty board: 300 simulations
+        - With Sbasic=300, half-filled board: 300 * (1 + 0.1*24.5) ≈ 345 simulations
+        - With Sbasic=300, full board: 300 * (1 + 0.1*49) = 447 simulations
+        
+        Args:
+            state: Current game state
+            
+        Returns:
+            int: Number of simulations to run
         """
-        # nfilled là tổng số quân cờ trên bàn
+        # nfilled is the total number of pieces on the board
         total_pieces = state.balls[1] + state.balls[-1]
         
-        # Nếu dùng công thức, áp dụng Stotal = Sbasic * (1 + 0.1 * nfilled)
+        # If using formula, apply Stotal = Sbasic * (1 + 0.1 * nfilled)
         if self.use_simulation_formula:
             return int(self.basic_simulations * (1 + 0.1 * total_pieces))
-        # Nếu không, trả về Sbasic
+        # Otherwise, return Sbasic
         else:
             return self.basic_simulations
         
     def calculate_tournament_simulations(self, state):
-        """Tính số lượng mô phỏng cho từng vòng của tournament dựa trên trạng thái bàn cờ.
+        """Calculate simulation counts for each tournament round based on board state.
         
-        Khi use_simulation_formula=True:
-            Áp dụng công thức Stotal = Sbasic * (1 + 0.1 * nfilled) cho từng vòng tournament.
-        Khi use_simulation_formula=False:
-            Sử dụng giá trị cố định từ tournament_sizes.
+        When use_simulation_formula=True:
+            Applies formula Stotal = Sbasic * (1 + 0.1 * nfilled) to each tournament round.
+        When use_simulation_formula=False:
+            Uses fixed values from tournament_sizes.
             
-        Cấu hình mặc định cho MCD: (S1, S2, S3) = (600, 600, 300)
+        Default configuration for MCD: (S1, S2, S3) = (600, 600, 300)
         
+        Args:
+            state: Current game state
+            
         Returns:
-            list: Danh sách [S1, S2, S3] chứa số lượng mô phỏng cho mỗi vòng tournament.
+            list: List [S1, S2, S3] of simulation counts for each tournament round
         """
-        # Lấy các giá trị Sbasic cho từng vòng tournament
-        # Mặc định: (S1, S2, S3) = (600, 600, 300)
+        # Get base values for each tournament round
+        # Default: (S1, S2, S3) = (600, 600, 300)
         S1_base, S2_base, S3_base = self.tournament_sizes
         
-        # Nếu dùng công thức, áp dụng Stotal = Sbasic * (1 + 0.1 * nfilled) cho từng vòng
+        # If using formula, apply Stotal = Sbasic * (1 + 0.1 * nfilled) to each round
         if self.use_simulation_formula:
-            # Tính số quân cờ trên bàn (nfilled)
+            # Calculate total pieces on board (nfilled)
             total_pieces = state.balls[1] + state.balls[-1]
             
             S1 = int(S1_base * (1 + 0.1 * total_pieces))
             S2 = int(S2_base * (1 + 0.1 * total_pieces))
             S3 = int(S3_base * (1 + 0.1 * total_pieces))
-        # Nếu không, sử dụng giá trị cố định từ tournament_sizes
+        # Otherwise, use fixed values from tournament_sizes
         else:
             S1, S2, S3 = S1_base, S2_base, S3_base
         
         return [S1, S2, S3]
     
     def get_play(self):
-        """Alias for get_move()"""
+        """Alias for get_move().
+        
+        Returns:
+            Move: Best move found by the algorithm
+        """
         return self.get_move()
         
     def get_move(self):
-        """Chọn nước đi tốt nhất sử dụng Monte Carlo."""
+        """Find the best move using Monte Carlo Tree Search.
+        
+        Returns:
+            Move: Best move found, or None if no legal moves
+        """
         start_time = time.time()
         root = MonteCarloNode(self.root_state)
         simulations = self.calculate_simulations(self.root_state)
         
         simulation_count = 0
         while simulation_count < simulations and (time.time() - start_time) < self.max_time:
-            # 1. Lựa chọn
+            # 1. Selection
             node = root
             state = deepcopy(self.root_state)
             
-            # Đi xuống cây cho đến khi gặp nút có nước đi chưa thử hoặc nút lá
+            # Traverse down the tree until reaching a node with untried moves or a leaf
             while node.untried_moves == [] and node.children != []:
                 node = node.select_child()
                 state.move_with_position(node.move)
                 state.toggle_player()
             
-            # 2. Mở rộng
+            # 2. Expansion
             if node.untried_moves != []:
                 move = random.choice(node.untried_moves)
                 node.untried_moves.remove(move)
@@ -145,16 +215,16 @@ class MonteCarloBase:
                 node.children.append(child)
                 node = child
             
-            # 3. Mô phỏng và 4. Lan truyền ngược
+            # 3. Simulation and 4. Backpropagation
             result = self._simulate(state)
             while node:
                 node.update(result)
                 node = node.parent
-                result = 1 - result  # Đảo ngược kết quả cho mỗi cấp
+                result = 1 - result  # Flip result for each level
                 
             simulation_count += 1
         
-        # Chọn nước đi tốt nhất dựa trên số lần thăm
+        # Choose best move based on visit count
         if not root.children:
             return None
             
@@ -162,38 +232,46 @@ class MonteCarloBase:
         return best_child.move
         
     def _evaluate_final_position(self, state, player):
-        """Đánh giá vị trí cuối cùng sử dụng hàm đánh giá thống nhất.
-        E(p) = Nown - Nopp
-        + Win với bàn đầy: E(p) + 50
-        + Win trước khi bàn đầy: E(p) + 500
-        + Thua với bàn đầy: E(p) - 50
-        + Thua trước khi bàn đầy: E(p) - 500
+        """Evaluate final position using a unified evaluation function.
+        
+        Evaluation function: E(p) = Nown - Nopp
+        - Win with full board: E(p) + 50
+        - Win before full board: E(p) + 500
+        - Loss with full board: E(p) - 50
+        - Loss before full board: E(p) - 500
+        
+        Args:
+            state: Game state to evaluate
+            player: Player perspective to evaluate from
+            
+        Returns:
+            float: Evaluation score converted to [0, 1] range for Monte Carlo
         """
         opponent = -player
         
-        # Đếm số quân của mỗi bên
+        # Count pieces for each side
         num_own = state.balls[player]
         num_opp = state.balls[opponent]
         
-        # Đánh giá cơ bản
+        # Basic evaluation
         score = num_own - num_opp
         
-        # Nếu trò chơi đã kết thúc, thêm điểm thưởng/phạt
+        # If game is over, add bonus/penalty
         if state.is_game_over():
-            if num_own > num_opp:  # Thắng
-                # Kiểm tra bàn đầy hay chưa đầy
+            if num_own > num_opp:  # Win
+                # Check if board is full or not
                 total_pieces = num_own + num_opp
-                empty_spaces = 49 - total_pieces  # Bàn cờ 7x7 có 49 ô
-                if empty_spaces == 0:  # Bàn đầy
+                empty_spaces = 49 - total_pieces  # 7x7 board has 49 cells
+                if empty_spaces == 0:  # Full board
                     score += 50
-                else:  # Thắng trước khi bàn đầy
+                else:  # Win before full board
                     score += 500
-            elif num_own < num_opp:  # Thua
+            elif num_own < num_opp:  # Loss
                 total_pieces = num_own + num_opp
                 empty_spaces = 49 - total_pieces
-                if empty_spaces == 0:  # Bàn đầy
+                if empty_spaces == 0:  # Full board
                     score -= 50
-                else:  # Thua trước khi bàn đầy
+                else:  # Loss before full board
                     score -= 500
                     
         # Convert to probabilities for Monte Carlo
@@ -206,7 +284,14 @@ class MonteCarloBase:
             return 0.5  # Draw
         
     def _simulate(self, state):
-        """Mô phỏng ngẫu nhiên từ trạng thái hiện tại đến khi kết thúc."""
+        """Simulate a random game from the current state until game end.
+        
+        Args:
+            state: Starting game state
+            
+        Returns:
+            float: Evaluation score in [0, 1] range
+        """
         state = deepcopy(state)
         player = state.current_player()
         
@@ -215,7 +300,7 @@ class MonteCarloBase:
             if not moves:
                 break
             
-            # Chọn nước đi ngẫu nhiên
+            # Choose a random move
             move = random.choice(moves)
             state.move_with_position(move)
             state.toggle_player()
