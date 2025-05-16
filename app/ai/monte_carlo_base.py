@@ -11,6 +11,8 @@ import math
 import time
 from copy import deepcopy
 
+from app.ai.constants import WIN_BONUS_EARLY, WIN_BONUS_FULL_BOARD
+
 class MonteCarloNode:
     """Base node class for Monte Carlo Tree Search.
     
@@ -29,7 +31,7 @@ class MonteCarloNode:
         self.parent = parent
         self.move = move  # Move that led to this state
         self.children = []
-        self.wins = 0
+        self.ep = 0
         self.visits = 0
         self.untried_moves = state.get_all_possible_moves() if not state.is_game_over() else []
         
@@ -45,7 +47,7 @@ class MonteCarloNode:
         if self.visits == 0:
             return float('inf')
         
-        exploitation = self.wins / self.visits
+        exploitation = self.ep / self.visits
         exploration = c * math.sqrt(2 * math.log(self.parent.visits) / self.visits)
         return exploitation + exploration
     
@@ -82,7 +84,7 @@ class MonteCarloNode:
             result: Simulation result (typically 0 or 1)
         """
         self.visits += 1
-        self.wins += result
+        self.ep += result
 
 class MonteCarloBase:
     """Basic Monte Carlo Tree Search with random rollouts.
@@ -266,27 +268,21 @@ class MonteCarloBase:
             if num_own > num_opp:  # Win
                 # Check if board is full or not
                 total_pieces = num_own + num_opp
-                empty_spaces = 49 - total_pieces  # 7x7 board has 49 cells
+                empty_spaces = state.n_fields**2 - total_pieces  # 7x7 board has 49 cells
                 if empty_spaces == 0:  # Full board
-                    score += 50
+                    score += WIN_BONUS_FULL_BOARD
                 else:  # Win before full board
-                    score += 500
+                    score += WIN_BONUS_EARLY
             elif num_own < num_opp:  # Loss
                 total_pieces = num_own + num_opp
-                empty_spaces = 49 - total_pieces
+                empty_spaces = state.n_fields**2 - total_pieces
                 if empty_spaces == 0:  # Full board
-                    score -= 50
+                    score -= WIN_BONUS_FULL_BOARD
                 else:  # Loss before full board
-                    score -= 500
-                    
-        # Convert to probabilities for Monte Carlo
-        # Scale from large range to [0,1] range
-        if score > 0:
-            return min(0.9 + (score / 1000), 1.0)  # Cap at 1.0
-        elif score < 0:
-            return max(0.1 + (score / 1000), 0.0)  # Cap at 0.0
-        else:
-            return 0.5  # Draw
+                    score -= WIN_BONUS_EARLY
+
+        # Normalize score to [0, 1] range     
+        return (score + 549) / 1098
         
     def _simulate(self, state):
         """Simulate a random game from the current state until game end.

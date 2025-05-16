@@ -11,26 +11,8 @@ import numpy as np
 from copy import deepcopy
 from collections import deque as dl
 
-# Game constants
-BOARD_SIZE = 7  # Standard 7x7 board
-PLAYER_ONE = 1  # First player (white)
-PLAYER_TWO = -1  # Second player (black)
-EMPTY_CELL = 0  # Empty cell
-
-# Move types
-CLONE_MOVE = 'c'  # Clone move type
-JUMP_MOVE = 'j'  # Jump move type
-
-# Direction constants
-ADJACENT_DIRS = [(-1, 1), (0, 1), (1, 1), (-1, 0), 
-                 (1, 0), (-1, -1), (0, -1), (1, -1)]
-
-JUMP_DIRS = [(-2, 2), (-2, 1), (-2, 0), (-2, -1), (-2, -2), 
-             (-1, 2), (-1, -2), (0, 2), (0, -2), (1, 2), 
-             (1, -2), (2, 2), (2, 1), (2, 0), (2, -1), (2, -2)]
-
-# Game end conditions
-REPEAT_THRESHOLD = 3  # A position appearing 3 times ends the game
+from app.ai.constants import (BOARD_SIZE, PLAYER_ONE, PLAYER_TWO, EMPTY_CELL,
+                        CLONE_MOVE, JUMP_MOVE, ADJACENT_POSITIONS, JUMP_POSITIONS, REPEAT_THRESHOLD)
 
 class Ataxx:
     """
@@ -100,11 +82,11 @@ class Ataxx:
                 source_pos = (x, y)
                 
                 # Add all valid Clone moves
-                clone_targets = self.get_empty_pos(source_pos, ADJACENT_DIRS)
+                clone_targets = self.get_empty_pos(source_pos, ADJACENT_POSITIONS)
                 possible_moves.extend([(CLONE_MOVE, target) for target in clone_targets])
                 
                 # Add all valid Jump moves
-                jump_targets = self.get_empty_pos(source_pos, JUMP_DIRS)
+                jump_targets = self.get_empty_pos(source_pos, JUMP_POSITIONS)
                 possible_moves.extend([(JUMP_MOVE, target, source_pos) for target in jump_targets])
 
         return possible_moves
@@ -116,8 +98,8 @@ class Ataxx:
             state: External state object with board, player and piece counts
         """
         self.board = state.board
-        self.turn_player = state.player
-        
+        # Support both 'player' and 'turn_player' attributes for compatibility
+        self.turn_player = getattr(state, "player", getattr(state, "turn_player", None))
         self.balls[PLAYER_ONE] = state.balls[PLAYER_ONE]
         self.balls[PLAYER_TWO] = state.balls[PLAYER_TWO]
 
@@ -240,7 +222,7 @@ class Ataxx:
         Returns:
             tuple: (x, y) of the target position, or base_pos if no valid targets
         """
-        valid_targets = self.get_empty_pos(base_pos, ADJACENT_DIRS)
+        valid_targets = self.get_empty_pos(base_pos, ADJACENT_POSITIONS)
 
         if not valid_targets:
             return base_pos
@@ -256,7 +238,7 @@ class Ataxx:
         Returns:
             tuple: (x, y) of the target position, or base_pos if no valid targets
         """
-        valid_targets = self.get_empty_pos(base_pos, JUMP_DIRS)
+        valid_targets = self.get_empty_pos(base_pos, JUMP_POSITIONS)
 
         if not valid_targets:
             return base_pos
@@ -321,7 +303,7 @@ class Ataxx:
             x: X-coordinate of the newly placed piece
             y: Y-coordinate of the newly placed piece
         """
-        occupied_neighbors = self.get_full_pos([x, y], ADJACENT_DIRS)
+        occupied_neighbors = self.get_full_pos([x, y], ADJACENT_POSITIONS)
         
         for nx, ny in occupied_neighbors:
             # If the piece belongs to the opponent, capture it

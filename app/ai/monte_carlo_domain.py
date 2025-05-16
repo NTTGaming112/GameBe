@@ -8,6 +8,8 @@ via tournament layering and probability-based move selection during rollouts.
 """
 import random
 from copy import deepcopy
+
+from app.ai.constants import CLONE_MOVE, MOVE_WEIGHTS
 from .monte_carlo_base import MonteCarloBase
 
 class MonteCarloDomain(MonteCarloBase):
@@ -31,7 +33,15 @@ class MonteCarloDomain(MonteCarloBase):
         # Default (S1, S2, S3) = (600, 600, 300)
         self.tournament_sizes = kwargs.get('tournament_sizes', [600, 600, 300])
         super().__init__(state, **kwargs)
+    
+    def get_play(self):
+        """Alias for get_move().
         
+        Returns:
+            Move: Best move found by the algorithm
+        """
+        return self.get_move()
+    
     def get_move(self):
         """Use Tournament Layering to select the best move.
         
@@ -107,6 +117,7 @@ class MonteCarloDomain(MonteCarloBase):
         best_move = candidates[0][0]
         print(f"Final result: Selected move with score {candidates[0][1]:.4f}")
         return best_move
+        
     def _evaluate_move(self, state, simulations):
         """Evaluate a move using Monte Carlo with domain knowledge.
         
@@ -117,6 +128,10 @@ class MonteCarloDomain(MonteCarloBase):
         Returns:
             float: Win ratio (0 to 1)
         """
+        # If no simulations requested, return a default value of 0.5
+        if simulations <= 0:
+            return 0.5
+            
         wins = 0
         for _ in range(simulations):
             result = self._simulate_with_domain_knowledge(state)
@@ -194,7 +209,7 @@ class MonteCarloDomain(MonteCarloBase):
             float: Heuristic score for the move
         """
         player = state.current_player()
-        s1, s2, s3, s4 = 1.0, 0.4, 0.7, 0.4  # Heuristic weights
+        s1, s2, s3, s4 = MOVE_WEIGHTS.values()  # Heuristic weights
         
         # Create new state and calculate captures
         next_state = deepcopy(state)
@@ -202,7 +217,7 @@ class MonteCarloDomain(MonteCarloBase):
         captures = state.balls[-player] - next_state.balls[-player]
         
         # Determine move type and positions
-        if move[0] == 'c':  # Clone
+        if move[0] == CLONE_MOVE:  # Clone
             dest_x, dest_y = move[1]
             is_clone = 1
             adjacent_friendly_pieces_source = 0

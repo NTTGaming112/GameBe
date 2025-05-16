@@ -1,16 +1,4 @@
-
-# Constants
-BOARD_SIZE = 7  # Board dimension
-BOARD_TOTAL_CELLS = BOARD_SIZE * BOARD_SIZE  # Total number of cells (7x7 = 49)
-WIN_BONUS_FULL_BOARD = 50  # Bonus for winning on a full board
-WIN_BONUS_EARLY = 500  # Bonus for winning before board is full
-MOVE_WEIGHTS = {
-    "capture": 1.0,  # s1: Weight for captured opponent pieces
-    "target_surroundings": 0.4,  # s2: Weight for own pieces around target
-    "clone_bonus": 0.7,  # s3: Bonus for clone moves
-    "jump_penalty": 0.4   # s4: Penalty for leaving own pieces around jump source
-}
-ADJACENT_POSITIONS = [(-1,1),(0,1),(1,1),(-1,0),(1,0),(-1,-1),(0,-1),(1,-1)]
+from app.ai.constants import BOARD_SIZE, BOARD_TOTAL_CELLS, CLONE_MOVE, WIN_BONUS_FULL_BOARD, WIN_BONUS_EARLY, MOVE_WEIGHTS, ADJACENT_POSITIONS
 
 def minimax(board, state, depth_minimax=4):
     """Alpha-Beta Minimax with advanced move ordering.
@@ -78,7 +66,7 @@ def minimax(board, state, depth_minimax=4):
             stones_taken = next_state.balls[state.player] - state.balls[state.player]
             
             # Determine move type (Clone or Jump)
-            is_clone = move[0] == 'c'
+            is_clone = move[0] == CLONE_MOVE
             target_pos = move[1]
             
             # Count player pieces around target position

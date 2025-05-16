@@ -49,7 +49,7 @@ class AlphaBetaMonteCarlo:
             Move: Best move found by the selected algorithm
         """
         total_pieces = self.state.balls[1] + self.state.balls[-1]
-        empty_spaces = 49 - total_pieces  # 7x7 board has 49 cells
+        empty_spaces = self.state.n_fields**2 - total_pieces  # 7x7 board has 49 cells
         
         # Choose algorithm based on number of empty spaces
         if empty_spaces <= self.switch_threshold:

@@ -7,7 +7,8 @@ This module provides game state representation and game mechanics for AI algorit
 It wraps the Ataxx class to provide an interface for AI algorithms to interact with the game.
 """
 from copy import deepcopy
-from .ataxx_state import Ataxx, PLAYER_ONE, PLAYER_TWO
+from app.ai.constants import PLAYER_ONE, PLAYER_TWO
+from .ataxx_state import Ataxx
 
 class StateMinimax:
     """Game state representation for minimax algorithm.

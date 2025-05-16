@@ -5,8 +5,8 @@ import logging
 import time
 from typing import Dict, Any, Tuple
 
-from app.ai.ataxx_env import AtaxxState
-from app.ai.mcts_factory import create_mcts
+from app.ai.ataxx_state import Ataxx
+from app.ai.monte_carlo import get_monte_carlo_player
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -21,44 +21,6 @@ def home():
     """Home endpoint with simple instructions."""
     return """
     <h1>Ataxx MCTS API</h1>
-    <p>Send a POST request to /get_move with a JSON payload containing the game state.</p>
-    <p>Example payload:</p>
-    <pre>
-    {
-        "board": [
-            ["yellow", "empty", "empty", "empty", "empty", "empty", "red"],
-            ["empty", "empty", "empty", "empty", "empty", "empty", "empty"],
-            ["empty", "empty", "empty", "empty", "empty", "empty", "empty"],
-            ["empty", "empty", "empty", "empty", "empty", "empty", "empty"],
-            ["empty", "empty", "empty", "empty", "empty", "empty", "empty"],
-            ["empty", "empty", "empty", "empty", "empty", "empty", "empty"],
-            ["red", "empty", "empty", "empty", "empty", "empty", "yellow"]
-        ],
-        "current_player": "yellow",
-        "algorithm": "mcts-fractional-dk",
-        "iterations": 1000,
-        "policy_type": "epolicy",
-        "policy_args": {"epsilon": 0.1, "capture_weight": 1.0}
-    }
-    </pre>
-    
-    <h2>Available Algorithms:</h2>
-    <ul>
-        <li><strong>mcts-binary</strong>: Standard MCTS with binary (win/loss) outcomes</li>
-        <li><strong>mcts-uct</strong>: MCTS with UCT and heuristic evaluation</li>
-        <li><strong>mcts-fractional</strong>: MCTS with fractional scores based on piece counts</li>
-        <li><strong>mcts-binary-dk</strong>: MCTS with binary outcomes and heuristic-based rollout</li>
-        <li><strong>mcts-fractional-dk</strong>: MCTS with fractional scores and heuristic-based rollout</li>
-        <li><strong>mcts-binary-minimax2</strong>: MCTS with binary outcomes and Minimax2 playout</li>
-    </ul>
-    
-    <h2>Available Policies:</h2>
-    <ul>
-        <li><strong>random</strong>: Selects moves randomly during simulation</li>
-        <li><strong>heuristic</strong>: Uses game-specific heuristics to guide move selection</li>
-        <li><strong>ucb</strong>: Uses UCB formula to balance exploration and exploitation</li>
-        <li><strong>epolicy</strong>: Combines heuristic and UCB policies</li>
-    </ul>
     """
 
 @app.route('/get_move', methods=['POST'])
@@ -70,18 +32,27 @@ def get_move():
     {
         "board": 7x7 array representing the Ataxx board,
         "current_player": "red" or "yellow",
-        "algorithm": "mcts-binary", "mcts-uct", "mcts-fractional", "mcts-binary-dk", "mcts-fractional-dk", or "mcts-binary-minimax2",
-        "iterations": number of MCTS iterations,
-        "time_limit": optional time limit in seconds,
-        "policy_type": "random", "heuristic", "ucb", or "epolicy",
-        "policy_args": optional dictionary of policy parameters
+        "algorithm": "MC" (Basic Monte Carlo), "MCD" (Monte Carlo with Domain Knowledge), 
+                    "AB+MCD" (Alpha-Beta + Monte Carlo), or "MINIMAX" (Alpha-Beta Minimax),
+        "iterations": number of MCTS iterations (default: 300),
+        "policy_args": {
+            "switch_threshold": threshold for switching algorithms in AB+MCD (default: 31),
+            "use_simulation_formula": whether to use simulation formula (default: false),
+            "s1_ratio": ratio of S1 simulations to iterations (default: 1.0),
+            "s2_ratio": ratio of S2 simulations to iterations (default: 1.0),
+            "s3_ratio": ratio of S3 simulations to iterations (default: 0.5),
+            "depth": search depth for Minimax algorithm (default: 4)
+        }
     }
     
     Response JSON format:
     {
-        "from_pos": [row, col],
-        "to_pos": [row, col],
-        "execution_time": execution time in seconds
+        "move": {
+            "from": {"row": row, "col": col},
+            "to": {"row": row, "col": col}
+        },
+        "execution_time": execution time in seconds,
+        "current_player": current player after move
     }
     """
     try:
@@ -96,21 +67,66 @@ def get_move():
             if field not in data:
                 return jsonify({"error": f"Missing required field: {field}"}), 400
         
-        state = AtaxxState(
-            board=data["board"],
-            current_player=data["current_player"]
-        )
+        # Chuyển đổi dữ liệu từ request sang Ataxx object
+        state = Ataxx()
+        # Gán lại board và current_player nếu có trong data
+        if "board" in data:
+            # Hỗ trợ cả kiểu string ('red', 'yellow', None) và số (1, -1, 0)
+            def cell_to_num(cell):
+                if cell == 'red' or cell == 1:
+                    return 1
+                elif cell == 'yellow' or cell == -1:
+                    return -1
+                else:
+                    return 0
+            state.board = [[cell_to_num(cell) for cell in row] for row in data["board"]]
+            # Cập nhật lại self.balls cho đúng với board mới
+            state.balls[1] = sum(cell == 1 for row in state.board for cell in row)
+            state.balls[-1] = sum(cell == -1 for row in state.board for cell in row)
+
+        if "current_player" in data:
+            # Chuyển "red"/"yellow" sang PLAYER_ONE/PLAYER_TWO nếu cần
+            if data["current_player"] == "red":
+                state.turn_player = 1
+            elif data["current_player"] == "yellow":
+                state.turn_player = -1
+            else:
+                state.turn_player = data["current_player"]
         
-        algorithm = data.get("algorithm", "mcts-binary")
-        iterations = int(data.get("iterations", 1000))
-        time_limit = data.get("time_limit")
-        policy_type = data.get("policy_type", "random")
+        algorithm = data.get("algorithm", "MC")
+        iterations = int(data.get("iterations", 300))
+        
+        # Extract specific parameters from policy_args if provided
         policy_args = data.get("policy_args", {})
+        switch_threshold = policy_args.get("switch_threshold", 31)
+        use_simulation_formula = policy_args.get("use_simulation_formula", False)
+        s1_ratio = policy_args.get("s1_ratio", 1.0)
+        s2_ratio = policy_args.get("s2_ratio", 1.0)
+        s3_ratio = policy_args.get("s3_ratio", 0.5)
+        depth = policy_args.get("depth", 4)
         
         start_time = time.time()
         
-        mcts = create_mcts(algorithm, iterations, time_limit, policy_type, **policy_args)
-        best_move = mcts.search(state)
+        # Correctly pass the state as the first argument
+        mcts = get_monte_carlo_player(
+            state, 
+            mc_type=algorithm,
+            number_simulations=iterations,
+            switch_threshold=switch_threshold,
+            use_simulation_formula=use_simulation_formula,
+            s1_ratio=s1_ratio,
+            s2_ratio=s2_ratio,
+            s3_ratio=s3_ratio,
+            depth=depth
+        )
+        
+        # Chạy thuật toán và lấy nước đi tốt nhất
+        if hasattr(mcts, 'get_move'):
+            best_move = mcts.get_move()
+        elif hasattr(mcts, 'get_play'):
+            best_move = mcts.get_play()
+        else:
+            raise AttributeError(f"AI player object {type(mcts)} has no get_move or get_play method")
         
         execution_time = time.time() - start_time
         
@@ -119,24 +135,27 @@ def get_move():
                 "error": "No legal moves available",
                 "execution_time": execution_time
             }), 200
-        
-        from_pos, to_pos = best_move
+
+        # best_move có thể là (CLONE_MOVE, (x, y)) hoặc (JUMP_MOVE, (x_dest, y_dest), (x_src, y_src))
+        if best_move[0] == 'c':  # Clone move
+            _, to_pos = best_move
+            from_pos = None  # Clone move không có from_pos rõ ràng
+        else:  # Jump move
+            _, to_pos, from_pos = best_move
+
+        # Trả về current_player dạng 'red' hoặc 'yellow'
+        player_val = state.turn_player if callable(getattr(state, 'current_player', None)) else state.current_player
+        player_str = 'red' if player_val == 1 else 'yellow'
         response = {
             "move": {
-                "from": {
-                    "row": from_pos[0],
-                    "col": from_pos[1]
-                },
-                "to": {
-                    "row": to_pos[0],
-                    "col": to_pos[1]
-                }
+                "from": {"row": from_pos[0], "col": from_pos[1]} if from_pos else None,
+                "to": {"row": to_pos[0], "col": to_pos[1]}
             },
-            "execution_time": execution_time,
-            "current_player": state.current_player,
+            "execution_time": float(execution_time),
+            "current_player": player_str,
         }
         
-        logger.info(f"Responding with move: {response}")
+        logger.info(f"Responding with move: {json.dumps(response)}")
         return jsonify(response), 200
     
     except Exception as e:
@@ -150,10 +169,19 @@ def get_legal_moves():
         if not data:
             return jsonify({"error": "No data provided"}), 400
         
-        state = AtaxxState(
-            board=data["board"],
-            current_player=data["current_player"]
-        )
+        # Chuyển đổi dữ liệu từ request sang Ataxx object
+        state = Ataxx()
+        # Gán lại board và current_player nếu có trong data
+        if "board" in data:
+            state.board = data["board"]
+        if "current_player" in data:
+            # Chuyển "red"/"yellow" sang PLAYER_ONE/PLAYER_TWO nếu cần
+            if data["current_player"] == "red":
+                state.turn_player = 1
+            elif data["current_player"] == "yellow":
+                state.turn_player = -1
+            else:
+                state.turn_player = data["current_player"]
         
         legal_moves = state.get_legal_moves()
         
@@ -180,10 +208,19 @@ def evaluate_state():
         if not data:
             return jsonify({"error": "No data provided"}), 400
         
-        state = AtaxxState(
-            board=data["board"],
-            current_player=data["current_player"]
-        )
+        # Chuyển đổi dữ liệu từ request sang Ataxx object
+        state = Ataxx()
+        # Gán lại board và current_player nếu có trong data
+        if "board" in data:
+            state.board = data["board"]
+        if "current_player" in data:
+            # Chuyển "red"/"yellow" sang PLAYER_ONE/PLAYER_TWO nếu cần
+            if data["current_player"] == "red":
+                state.turn_player = 1
+            elif data["current_player"] == "yellow":
+                state.turn_player = -1
+            else:
+                state.turn_player = data["current_player"]
         
         winner = state.get_winner()
         is_terminal = state.is_terminal()
@@ -200,6 +237,3 @@ def evaluate_state():
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)

@@ -9,15 +9,12 @@ Monte Carlo-based AI players for the Ataxx game.
 from .monte_carlo_base import MonteCarloBase
 from .monte_carlo_domain import MonteCarloDomain
 from .alpha_beta_monte_carlo import AlphaBetaMonteCarlo
-
-# Monte Carlo algorithm types
-MC_TYPE_BASIC = "MC"           # Basic Monte Carlo Tree Search
-MC_TYPE_DOMAIN = "MCD"         # Monte Carlo with Domain Knowledge
-MC_TYPE_ALPHA_BETA = "AB+MCD"  # Hybrid: Alpha-Beta + Monte Carlo Domain
+from .minimax_player import MinimaxPlayer
+from app.ai.constants import MC_TYPE_BASIC, MC_TYPE_DOMAIN, MC_TYPE_ALPHA_BETA, MC_TYPE_MINIMAX
 
 def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations=600,
                           switch_threshold=31, use_simulation_formula=False,
-                          s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5):
+                          s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, depth=4):
     """Factory function to create Monte Carlo-based AI players.
     
     This function creates different types of Monte Carlo AI players based on the
@@ -25,13 +22,15 @@ def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations
     
     Args:
         game_state: Current game state
-        mc_type: Monte Carlo algorithm type (MC_TYPE_BASIC, MC_TYPE_DOMAIN, MC_TYPE_ALPHA_BETA)
+        mc_type: Monte Carlo algorithm type (MC_TYPE_BASIC, MC_TYPE_DOMAIN, 
+                MC_TYPE_ALPHA_BETA, MC_TYPE_MINIMAX)
         number_simulations: Base simulation count (Sbasic ∈ {300, 600, 1200})
         switch_threshold: Switch threshold for hybrid algorithm (AB+MCD)
         use_simulation_formula: Whether to use Stotal = Sbasic * (1 + 0.1 * nfilled)
         s1_ratio: Ratio of S1 simulations to number_simulations (default: 1.0)
         s2_ratio: Ratio of S2 simulations to number_simulations (default: 1.0)
         s3_ratio: Ratio of S3 simulations to number_simulations (default: 0.5)
+        depth: Depth for Minimax search (default: 4)
         
     Returns:
         An instance of the appropriate Monte Carlo algorithm
@@ -61,6 +60,10 @@ def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations
         S3 = int(number_simulations * s3_ratio)
         kwargs['tournament_sizes'] = [S1, S2, S3]
         return AlphaBetaMonteCarlo(game_state, **kwargs)
+        
+    elif mc_type == MC_TYPE_MINIMAX:
+        # Alpha-Beta Minimax
+        return MinimaxPlayer(game_state, depth=depth)
     
     else:
         # Default: Basic Monte Carlo Tree Search
