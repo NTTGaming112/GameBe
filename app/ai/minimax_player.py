@@ -17,26 +17,30 @@ class MinimaxPlayer:
     This class implements the Alpha-Beta Minimax algorithm with the same interface
     as the Monte Carlo players to be compatible with the API.
     """
-    def __init__(self, state, depth=4):
+    def __init__(self, state, depth=4, time_limit=50):
         """
         Initialize the Minimax player.
         
         Args:
             state: Current game state
             depth: Maximum search depth (default: 4)
+            time_limit: Maximum time allowed for search (seconds)
         """
         self.state = self._convert_state(state)
         self.depth = depth
+        self.time_limit = time_limit
         self.board = Board()
-        
-    def get_move(self):
+    
+    def get_move(self, time_limit=None):
         """
         Get the best move using Alpha-Beta Minimax.
         
         Returns:
             The best move found by the algorithm
         """
-        return minimax(self.board, self.state, self.depth)
+        # Use provided time_limit if given, else default
+        tl = time_limit if time_limit is not None else self.time_limit
+        return minimax(self.board, self.state, self.depth, time_limit=tl)
         
     def search(self, state):
         """

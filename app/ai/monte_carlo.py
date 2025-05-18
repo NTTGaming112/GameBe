@@ -14,7 +14,7 @@ from app.ai.constants import MC_TYPE_BASIC, MC_TYPE_DOMAIN, MC_TYPE_ALPHA_BETA, 
 
 def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations=600,
                           switch_threshold=31, use_simulation_formula=False,
-                          s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, depth=4):
+                          s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, depth=4, time_limit=50):
     """Factory function to create Monte Carlo-based AI players.
     
     This function creates different types of Monte Carlo AI players based on the
@@ -31,6 +31,7 @@ def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations
         s2_ratio: Ratio of S2 simulations to number_simulations (default: 1.0)
         s3_ratio: Ratio of S3 simulations to number_simulations (default: 0.5)
         depth: Depth for Minimax search (default: 4)
+        time_limit: Time limit for AI decision making in seconds (default: 50)
         
     Returns:
         An instance of the appropriate Monte Carlo algorithm
@@ -51,7 +52,7 @@ def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations
         S2 = int(number_simulations * s2_ratio)
         S3 = int(number_simulations * s3_ratio)
         kwargs['tournament_sizes'] = [S1, S2, S3]
-        return MonteCarloDomain(game_state, **kwargs)
+        return MonteCarloDomain(game_state, time_limit=time_limit, **kwargs)
     
     elif mc_type == MC_TYPE_ALPHA_BETA:
         # Hybrid: Alpha-Beta + Monte Carlo Domain
@@ -59,13 +60,13 @@ def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations
         S2 = int(number_simulations * s2_ratio)
         S3 = int(number_simulations * s3_ratio)
         kwargs['tournament_sizes'] = [S1, S2, S3]
-        return AlphaBetaMonteCarlo(game_state, **kwargs)
+        return AlphaBetaMonteCarlo(game_state, time_limit=time_limit, **kwargs)
         
     elif mc_type == MC_TYPE_MINIMAX:
         # Alpha-Beta Minimax
-        return MinimaxPlayer(game_state, depth=depth)
+        return MinimaxPlayer(game_state, depth=depth, time_limit=time_limit)
     
     else:
         # Default: Basic Monte Carlo Tree Search
-        return MonteCarloBase(game_state, **kwargs)
+        return MonteCarloBase(game_state, time_limit=time_limit, **kwargs)
 

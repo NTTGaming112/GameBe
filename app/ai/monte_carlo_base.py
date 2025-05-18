@@ -103,6 +103,7 @@ class MonteCarloBase:
                 - max_time: Maximum search time in seconds (default: 1.0)
                 - tournament_sizes: Tournament simulation sizes (default: [600, 600, 300])
                 - use_simulation_formula: Whether to use simulation scaling (default: True)
+                - time_limit: Time limit for move calculation (default: 50 seconds)
         """
         self.root_state = state
         self.basic_simulations = kwargs.get('basic_simulations', 300)
@@ -110,6 +111,7 @@ class MonteCarloBase:
         self.max_time = kwargs.get('max_time', 1.0)
         self.tournament_sizes = kwargs.get('tournament_sizes', [600, 600, 300])
         self.use_simulation_formula = kwargs.get('use_simulation_formula', True)
+        self.time_limit = kwargs.get('time_limit', 50)
         
     def calculate_simulations(self, state):
         """Calculate number of simulations based on board state.
@@ -187,18 +189,15 @@ class MonteCarloBase:
         """
         return self.get_move()
         
-    def get_move(self):
-        """Find the best move using Monte Carlo Tree Search.
-        
-        Returns:
-            Move: Best move found, or None if no legal moves
-        """
+    def get_move(self, time_limit=None):
+        """Find the best move using Monte Carlo Tree Search with time limit support."""
+        if time_limit is None:
+            time_limit = self.time_limit
         start_time = time.time()
         root = MonteCarloNode(self.root_state)
         simulations = self.calculate_simulations(self.root_state)
-        
         simulation_count = 0
-        while simulation_count < simulations and (time.time() - start_time) < self.max_time:
+        while simulation_count < simulations and (time.time() - start_time) < time_limit:
             # 1. Selection
             node = root
             state = deepcopy(self.root_state)

@@ -1,12 +1,13 @@
 from app.ai.constants import BOARD_SIZE, BOARD_TOTAL_CELLS, CLONE_MOVE, WIN_BONUS_FULL_BOARD, WIN_BONUS_EARLY, MOVE_WEIGHTS, ADJACENT_POSITIONS
 
-def minimax(board, state, depth_minimax=4):
-    """Alpha-Beta Minimax with advanced move ordering.
+def minimax(board, state, depth_minimax=4, time_limit=50):
+    """Alpha-Beta Minimax with advanced move ordering and time limit support.
     
     Arguments:
         board: Game board instance
         state: Current game state
         depth_minimax: Maximum search depth (default: 4 ply)
+        time_limit: Maximum time in milliseconds (default: 50 ms)
     
     Optimizations:
         - Move ordering: prioritizes moves based on capturing, surroundings and move type
@@ -16,6 +17,9 @@ def minimax(board, state, depth_minimax=4):
     Returns:
         Best move found by the algorithm
     """
+    
+    import time as _time
+    start_time = _time.time()
     
     def evaluate_position(state):
         """Evaluates board position using formula: E(p) = Nown - Nopp + win/loss bonus."""
@@ -165,6 +169,8 @@ def minimax(board, state, depth_minimax=4):
     # Apply iterative deepening for faster results on shallow depths
     best_move = None
     for current_depth in range(1, max_depth + 1):
+        if time_limit and _time.time() - start_time > time_limit:
+            break
         _, move = max_value(state, current_depth, float('-inf'), float('inf'))
         if move:
             best_move = move

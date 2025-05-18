@@ -81,6 +81,7 @@ async def get_move(request: Request):
     s2_ratio = policy_args.get("s2_ratio", 1.0)
     s3_ratio = policy_args.get("s3_ratio", 0.5)
     depth = policy_args.get("depth", 4)
+    time_limit = float(data.get("time_limit", 50))
     start_time = time.time()
     mcts = get_monte_carlo_player(
         state,
@@ -91,10 +92,11 @@ async def get_move(request: Request):
         s1_ratio=s1_ratio,
         s2_ratio=s2_ratio,
         s3_ratio=s3_ratio,
-        depth=depth
+        depth=depth,
+        time_limit=time_limit
     )
     if hasattr(mcts, 'get_move'):
-        best_move = mcts.get_move()
+        best_move = mcts.get_move(time_limit=time_limit)
     elif hasattr(mcts, 'get_play'):
         best_move = mcts.get_play()
     else:
