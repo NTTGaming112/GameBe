@@ -42,16 +42,20 @@ class MonteCarloDomain(MonteCarloBase):
         """
         return self.get_move()
     
-    def get_move(self):
-        """Use Tournament Layering to select the best move.
+    def get_move(self, time_limit=60):
+        """Use Tournament Layering to select the best move, with optional time limit (seconds).
         
         Tournament Layering is a technique where moves are filtered through
         multiple rounds of evaluation, with each round using more simulations
         for a smaller set of candidate moves.
         
+        Args:
+            time_limit (float, optional): Maximum time in seconds to spend on move selection.
+        
         Returns:
             Move: Best move found, or None if no legal moves
         """
+        import time as _time
         moves = self.root_state.get_all_possible_moves()
         if not moves or len(moves) == 1:
             return moves[0] if moves else None
@@ -65,10 +69,13 @@ class MonteCarloDomain(MonteCarloBase):
         tournament_sizes = self.calculate_tournament_simulations(self.root_state)
         S1, S2, S3 = tournament_sizes  # Simulations per round
         
+        start_time = _time.time()
         # Round 1: Run S1 rollouts for each move
         print(f"Tournament round 1: Evaluating {len(moves)} moves with {S1} simulations each")
         move_scores = []
         for move in moves:
+            if time_limit and _time.time() - start_time > time_limit:
+                break
             next_state = deepcopy(self.root_state)
             next_state.move_with_position(move)
             next_state.toggle_player()
@@ -86,6 +93,8 @@ class MonteCarloDomain(MonteCarloBase):
             new_scores = []
             
             for move, prev_score in candidates:
+                if time_limit and _time.time() - start_time > time_limit:
+                    break
                 next_state = deepcopy(self.root_state)
                 next_state.move_with_position(move)
                 next_state.toggle_player()
@@ -103,6 +112,8 @@ class MonteCarloDomain(MonteCarloBase):
             final_scores = []
             
             for move, prev_score in candidates:
+                if time_limit and _time.time() - start_time > time_limit:
+                    break
                 next_state = deepcopy(self.root_state)
                 next_state.move_with_position(move)
                 next_state.toggle_player()
