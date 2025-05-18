@@ -1,8 +1,11 @@
 {
-  "routes": [
+  "version": 3,
+  "builds": [
     {
-      "src": "/(.*)",
-      "dest": "/api/index"
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "50mb" }
     }
-  ]
+  ],
+  "routes": [{ "src": "/(.*)", "dest": "api/index.py" }]
 }
