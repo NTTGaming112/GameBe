@@ -42,7 +42,7 @@ class MonteCarloDomain(MonteCarloBase):
         """
         return self.get_move()
     
-    def get_move(self, time_limit=60):
+    def get_move(self, time_limit=40):
         """Use Tournament Layering to select the best move, with optional time limit (seconds).
         
         Tournament Layering is a technique where moves are filtered through
