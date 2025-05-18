@@ -42,7 +42,7 @@ class MonteCarloDomain(MonteCarloBase):
         """
         return self.get_move()
     
-    def get_move(self, time_limit=40):
+    def get_move(self, time_limit=50):
         """Use Tournament Layering to select the best move, with optional time limit (seconds).
         
         Tournament Layering is a technique where moves are filtered through
@@ -75,6 +75,7 @@ class MonteCarloDomain(MonteCarloBase):
         move_scores = []
         for move in moves:
             if time_limit and _time.time() - start_time > time_limit:
+                
                 break
             next_state = deepcopy(self.root_state)
             next_state.move_with_position(move)
@@ -125,6 +126,12 @@ class MonteCarloDomain(MonteCarloBase):
             candidates = final_scores
         
         # Return the best move
+        if not candidates:
+            print("No candidates found (possibly due to time limit). Returning best found so far or None.")
+            if move_scores:
+                return move_scores[0][0]
+            else:
+                return None
         best_move = candidates[0][0]
         print(f"Final result: Selected move with score {candidates[0][1]:.4f}")
         return best_move
