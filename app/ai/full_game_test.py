@@ -220,15 +220,15 @@ def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", max_moves=None,
     for i in range(num_games):
         print(f"Starting game {i+1}/{num_games}...")
         
-        # Run a game, alternating who plays white
-        swap_sides = i % 2 == 1
+        # Always swap sides after each game
+        swap_sides = i % 2 == 0
         
         if swap_sides:
-            game_algo1, game_algo2 = algo2, algo1
-            print(f"Swapping sides: {game_algo1} as White, {game_algo2} as Black")
-        else:
             game_algo1, game_algo2 = algo1, algo2
             print(f"{game_algo1} as White, {game_algo2} as Black")
+        else:
+            game_algo1, game_algo2 = algo2, algo1
+            print(f"Swapping sides: {game_algo1} as White, {game_algo2} as Black")
         
         result = run_full_game(
             algo1=game_algo1,
@@ -248,14 +248,14 @@ def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", max_moves=None,
         # Update statistics, accounting for side swapping
         if result["winner"] == 1:  # White won
             if swap_sides:
-                algo2_wins += 1
+                algo1_wins += 1  # algo1 played as White when swap_sides is true
             else:
-                algo1_wins += 1
+                algo2_wins += 1  # algo2 played as White when swap_sides is false
         elif result["winner"] == -1:  # Black won
             if swap_sides:
-                algo1_wins += 1
+                algo2_wins += 1  # algo2 played as Black when swap_sides is true
             else:
-                algo2_wins += 1
+                algo1_wins += 1  # algo1 played as Black when swap_sides is false
         else:
             draws += 1
         
@@ -265,11 +265,13 @@ def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", max_moves=None,
         
         # Accumulate times (account for swapping)
         if swap_sides:
-            algo1_total_time += result[f"{algo2}_avg_time"] * result["total_moves"]
-            algo2_total_time += result[f"{algo1}_avg_time"] * result["total_moves"]
+            # algo1 as White, algo2 as Black
+            algo1_total_time += result[f"{game_algo1}_avg_time"] * result["total_moves"]
+            algo2_total_time += result[f"{game_algo2}_avg_time"] * result["total_moves"]
         else:
-            algo1_total_time += result[f"{algo1}_avg_time"] * result["total_moves"]
-            algo2_total_time += result[f"{algo2}_avg_time"] * result["total_moves"]
+            # algo2 as White, algo1 as Black
+            algo1_total_time += result[f"{game_algo2}_avg_time"] * result["total_moves"]
+            algo2_total_time += result[f"{game_algo1}_avg_time"] * result["total_moves"]
         
         print(f"Game {i+1} result: {result['winner_name']} wins.")
         print(f"Current standings: {algo1}: {algo1_wins}, {algo2}: {algo2_wins}, Draws: {draws}\n")
