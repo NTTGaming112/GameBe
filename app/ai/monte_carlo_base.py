@@ -197,7 +197,14 @@ class MonteCarloBase:
         root = MonteCarloNode(self.root_state)
         simulations = self.calculate_simulations(self.root_state)
         simulation_count = 0
-        while simulation_count < simulations and (time.time() - start_time) < time_limit:
+        
+        # Handle case where time_limit is None - run all simulations
+        if time_limit is None:
+            time_condition = True  # Always True, only check simulation count
+        else:
+            time_condition = (time.time() - start_time) < time_limit
+            
+        while simulation_count < simulations and time_condition:
             # 1. Selection
             node = root
             state = deepcopy(self.root_state)
@@ -229,6 +236,10 @@ class MonteCarloBase:
                 result = 1 - result  # Flip result for each level
                 
             simulation_count += 1
+            
+            # Update time condition if time_limit is not None
+            if time_limit is not None:
+                time_condition = (time.time() - start_time) < time_limit
         
         # Choose best move based on visit count
         if not root.children:

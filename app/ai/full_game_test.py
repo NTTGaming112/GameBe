@@ -19,27 +19,18 @@ def setup_default_board():
     """Create a standard Ataxx game with initial positions."""
     return Ataxx()
 
-def setup_half_filled_board():
-    """Create an Ataxx game with a half-filled board configuration."""
+def setup_custom_board(layout_name="map1"):
+    """Create an Ataxx game with a custom board layout by name."""
+    from app.ai.board_layouts import get_layout
+    
     game = Ataxx()
     # Clear the default setup
     game.board = [[0 for x in range(game.n_fields)] for y in range(game.n_fields)]
     game.balls = {1: 0, -1: 0}
     
-    # Create a specific half-filled board configuration
-    # For a 7x7 board, let's define a precise layout
-    # 0 = empty, 1 = white, -1 = black
-    board_layout = [
-        [ 1,  0,  0,  0,  0,  0, -1],
-        [ 0,  0,  0,  0,  0,  0,  0],
-        [ 0,  0,  0,  0,  0,  0,  0],
-        [ 0,  0,  0,  0,  0,  0,  0],
-        [ 0,  0,  0,  0,  0,  0,  0],
-        [ 0,  0,  0,  0,  0,  0,  0],
-        [-1,  0,  0,  0,  0,  0,  1],
-    ]
+    # Get and apply the selected layout
+    board_layout = get_layout(layout_name)
     
-    # Apply the layout to the game
     white_count = 0
     black_count = 0
     
@@ -62,13 +53,13 @@ def setup_half_filled_board():
     return game
 
 def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_threshold=31,
-               s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5):
-    """Get a move from the specified AI algorithm."""
+               s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, time_limit=None):
+    """Get a move from the specified AI algorithm, supporting time-limited search."""
     if algo_type == "Minimax":
         board = Board()
         state = StateMinimax(game.board, game.current_player(), game.balls)
         start_time = time.time()
-        move = minimax(board, state, depth_minimax)
+        move = minimax(board, state, depth_minimax, time_limit=time_limit)
         elapsed = time.time() - start_time
         return move, elapsed
     else:
@@ -82,19 +73,20 @@ def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_th
             use_simulation_formula=False,
             s1_ratio=s1_ratio,
             s2_ratio=s2_ratio,
-            s3_ratio=s3_ratio
+            s3_ratio=s3_ratio,
+            time_limit=time_limit
         )
         move = mc.get_play()
         elapsed = time.time() - start_time
         return move, elapsed
 
-def run_full_game(algo1="Minimax", algo2="MC", half_filled=True, max_moves=None, 
+def run_full_game(algo1="Minimax", algo2="MC", max_moves=None, 
                   depth_minimax=4, num_simulations=300, switch_threshold=31, 
-                  s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, verbose=True):
+                  s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, time_limit=None, verbose=True, layout=None):
     """Run a full game between two AI algorithms."""
     # Set up the initial board
-    if half_filled:
-        game = setup_half_filled_board()
+    if layout:
+        game = setup_custom_board(layout)
     else:
         game = setup_default_board()
     
@@ -133,7 +125,8 @@ def run_full_game(algo1="Minimax", algo2="MC", half_filled=True, max_moves=None,
             switch_threshold=switch_threshold,
             s1_ratio=s1_ratio,
             s2_ratio=s2_ratio,
-            s3_ratio=s3_ratio
+            s3_ratio=s3_ratio,
+            time_limit=time_limit
         )
         
         # Record timing
@@ -193,18 +186,27 @@ def run_full_game(algo1="Minimax", algo2="MC", half_filled=True, max_moves=None,
         "game_log": game_log
     }
 
-def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", half_filled=True, max_moves=None,
+def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", max_moves=None,
                        depth_minimax=4, num_simulations=300, switch_threshold=31, 
-                       s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, verbose=True):
+                       s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, time_limit=None, verbose=True,
+                       layout=None):
     """Run multiple games between two AI algorithms and collect statistics."""
     print(f"\n=== Running {num_games} games: {algo1} vs {algo2} ===")
     print(f"Settings:")
-    print(f"- Board: {'Half-filled' if half_filled else 'Default'}")
+    
+    # Determine board type
+    if layout:
+        board_type = f"Custom layout: {layout}"
+    else:
+        board_type = "map1"
+        
+    print(f"- Board: {board_type}")
     print(f"- Max moves per game: {'Unlimited' if max_moves is None else max_moves}")
     print(f"- Minimax depth: {depth_minimax}")
     print(f"- Simulations per move: {num_simulations}")
     print(f"- Tournament sizes ratio (S1:S2:S3): {s1_ratio}:{s2_ratio}:{s3_ratio}")
-    print(f"- Switch threshold: {switch_threshold}\n")
+    print(f"- Switch threshold: {switch_threshold}")
+    print(f"- Time limit per move: {time_limit if time_limit is not None else 'None'}\n")
     
     # Collect statistics
     results = []
@@ -231,7 +233,6 @@ def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", half_filled=Tru
         result = run_full_game(
             algo1=game_algo1,
             algo2=game_algo2,
-            half_filled=half_filled,
             max_moves=max_moves,
             depth_minimax=depth_minimax,
             num_simulations=num_simulations,
@@ -239,7 +240,9 @@ def run_multiple_games(num_games=5, algo1="Minimax", algo2="MC", half_filled=Tru
             s1_ratio=s1_ratio,
             s2_ratio=s2_ratio,
             s3_ratio=s3_ratio,
-            verbose=verbose
+            time_limit=time_limit,
+            verbose=verbose,
+            layout=layout,
         )
         
         # Update statistics, accounting for side swapping
@@ -307,8 +310,6 @@ if __name__ == "__main__":
                     help='Second algorithm to use')
     parser.add_argument('--games', type=int, default=2,
                     help='Number of games to play')
-    parser.add_argument('--half-filled', action='store_true', default=True,
-                    help='Start with a half-filled board')
     parser.add_argument('--max-moves', type=int, default=None,
                     help='Maximum moves per game (None for unlimited)')
     parser.add_argument('--depth', type=int, default=4,
@@ -325,6 +326,10 @@ if __name__ == "__main__":
                     help='Ratio of S3 simulations to basic simulations')
     parser.add_argument('--verbose', action='store_true', default=True,
                     help='Print detailed game information')
+    parser.add_argument('--time-limit', type=float, default=None,
+                    help='Time limit per move in seconds (None for unlimited)')
+    parser.add_argument('--layout', type=str, default=None,
+                    help='Board layout to use (map1, map2, map3, etc.)')
     
     args = parser.parse_args()
     
@@ -332,7 +337,6 @@ if __name__ == "__main__":
         num_games=args.games,
         algo1=args.algo1,
         algo2=args.algo2,
-        half_filled=args.half_filled,
         max_moves=args.max_moves,
         depth_minimax=args.depth,
         num_simulations=args.simulations,
@@ -340,5 +344,7 @@ if __name__ == "__main__":
         s1_ratio=args.s1_ratio,
         s2_ratio=args.s2_ratio,
         s3_ratio=args.s3_ratio,
+        time_limit=args.time_limit,
+        layout=args.layout,
         verbose=args.verbose
     )
