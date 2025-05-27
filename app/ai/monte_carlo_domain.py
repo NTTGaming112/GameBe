@@ -250,11 +250,11 @@ class MonteCarloDomain(MonteCarloBase):
                                               and 0 <= source_y + dy < 7 
                                               and state.board[source_x + dx][source_y + dy] == player)
         
-        # Count friendly pieces around destination
+        # Count friendly pieces around destination (before move)
         adjacent_friendly_pieces_dest = sum(1 for dx in [-1, 0, 1] for dy in [-1, 0, 1] 
                                         if (dx != 0 or dy != 0) and 0 <= dest_x + dx < 7 
                                         and 0 <= dest_y + dy < 7 
-                                        and next_state.board[dest_x + dx][dest_y + dy] == player)
+                                        and state.board[dest_x + dx][dest_y + dy] == player)
         
         # Calculate score according to formula and ensure non-negative
         score = (s1 * captures + s2 * adjacent_friendly_pieces_dest + 
