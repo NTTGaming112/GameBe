@@ -30,7 +30,7 @@ class AlphaBetaMonteCarlo:
         """
         self.state = state
         self.board = Board()
-        self.switch_threshold = kwargs.get('switch_threshold', 31)
+        self.switch_threshold = kwargs.get('switch_threshold', 25)
         self.mcd = MonteCarloDomain(state, **kwargs)
         self.minimax_depth = kwargs.get('minimax_depth', 4)
         
