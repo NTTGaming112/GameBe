@@ -22,10 +22,7 @@ class MCTSDomainNode(MonteCarloNode):
     def __init__(self, state, parent=None, move=None, mcd_instance=None):
         super().__init__(state, parent, move)
         self.mcd_instance = mcd_instance
-        
-        # Initialize additional attributes needed for MCTS
-        self.wins = 0  # Track wins for this node
-        
+            
         # Advanced caching for performance
         self._heuristic_cache = {}
         self._children_values_cache = {}
@@ -51,7 +48,6 @@ class MCTSDomainNode(MonteCarloNode):
         if self.visits == 0:
             return float('inf')
         
-        # Use ep (expected value) from base class instead of wins
         exploitation = self.ep / self.visits
         exploration = exploration_weight * math.sqrt(math.log(self.parent.visits) / self.visits)
         return exploitation + exploration
@@ -162,12 +158,12 @@ class MonteCarloDomain(MonteCarloBase):
         # NEW: Simulation-based parameters
         self.base_simulations = kwargs.get('basic_simulations', 600)  # User input simulations
         self.max_simulations = kwargs.get('max_simulations', 50000)  # Safety limit
-        self.min_simulations_per_move = kwargs.get('min_simulations_per_move', 50)
+        self.min_simulations_per_move = kwargs.get('min_simulations_per_move', 100)
         
         # Tournament distribution ratios (customizable)
-        self.round1_ratio = kwargs.get('round1_ratio', 0.4)    # 40% of total sims
-        self.round2_ratio = kwargs.get('round2_ratio', 0.35)   # 35% of total sims  
-        self.round3_ratio = kwargs.get('round3_ratio', 0.25)   # 25% of total sims
+        self.round1_ratio = kwargs.get('round1_ratio', 1)    # 40% of total sims
+        self.round2_ratio = kwargs.get('round2_ratio', 1)   # 35% of total sims  
+        self.round3_ratio = kwargs.get('round3_ratio', 0.5)   # 25% of total sims
         
         # Ensure ratios sum to 1.0
         total_ratio = self.round1_ratio + self.round2_ratio + self.round3_ratio
@@ -197,11 +193,10 @@ class MonteCarloDomain(MonteCarloBase):
         print(f"Domain weights: s1={self.s1}, s2={self.s2}, s3={self.s3}, s4={self.s4}")
     
     def get_move(self, time_limit=None):
-        """Get best move using optimized tournament with time management.
+        """Get best move using unified strategy selection system.
         
         Args:
-            time_limit: Time limit in seconds. If None, use unlimited time with full simulations.
-            simulations: Number of simulations to use. If None, use default base_simulations.
+            time_limit: Time limit in seconds. If None, use unlimited mode.
         """
         moves = self.root_state.get_all_possible_moves()
         if not moves:
@@ -214,62 +209,16 @@ class MonteCarloDomain(MonteCarloBase):
             
         print(f"🎯 Monte Carlo Domain: {len(moves)} moves, {self.current_simulations} simulations")
         
-        start_time = time.time()
-        
-        # If no time limit, use unlimited simulation mode
-        if time_limit is None:
-            return self._unlimited_simulation_search()
-        
-        # Adaptive strategy based on number of moves and time limit
-        if len(moves) <= 8 and time_limit >= 5.0:
-            # Use full tree search for small move sets
-            return self._optimized_tree_search(time_limit)
-        else:
-            # Use hybrid tournament for large move sets
-            return self._hybrid_tournament_search(time_limit)
+        # Use unified strategy selection for all time_limit cases
+        return self._unified_search_strategy(moves, time_limit)
     
     def _optimized_tree_search(self, time_limit):
-        """Optimized tree search with domain knowledge integration."""
-        start_time = time.time()
+        """Optimized tree search - now delegates to unified system for consistency."""
         moves = self.root_state.get_all_possible_moves()
         
-        # Handle unlimited time case
-        if time_limit is None:
-            print("🔥 Unlimited Optimized Tree Search")
-            return self._unlimited_optimized_tree_search(moves)
-        
-        # Pre-filter and order moves using domain knowledge
-        if self.use_move_ordering:
-            moves = self._order_moves_by_potential(moves)
-        
-        # Focus on top moves
-        focus_moves = moves[:min(6, len(moves))]
-        
-        # Distribute simulations among focus moves
-        simulations_per_move = max(
-            self.min_simulations_per_move,
-            self.current_simulations // len(focus_moves)
-        )
-        
-        print(f"🚀 Tree Search: {len(focus_moves)} focus moves, {simulations_per_move} sims/move")
-        
-        move_evaluations = {}
-        for move in focus_moves:
-            score = self._deep_tree_evaluation(move, simulations_per_move, time_limit)
-            move_evaluations[move] = score
-            
-            # Early termination if time is running out
-            if time.time() - start_time > time_limit * 0.9:
-                break
-        
-        # Select best move
-        if move_evaluations:
-            best_move = max(move_evaluations.items(), key=lambda x: x[1])[0]
-            best_score = move_evaluations[best_move]
-            print(f"✅ Selected move with score {best_score:.4f}")
-            return best_move
-        
-        return moves[0]
+        # For small move sets, we can still use tree search approach
+        # but through the unified tournament system for consistency
+        return self._unified_search_strategy(moves, time_limit)
     
     def _deep_tree_evaluation(self, move, iterations, time_limit):
         """Deep tree evaluation for a specific move."""
@@ -574,304 +523,113 @@ class MonteCarloDomain(MonteCarloBase):
             node = node.parent
     
     def _hybrid_tournament_search(self, time_limit):
-        """Hybrid tournament search for large move sets or limited time."""
+        """Legacy method - now delegates to unified search strategy."""
         moves = self.root_state.get_all_possible_moves()
         
-        # Quick filtering to reduce search space
-        if len(moves) > 12:
-            moves = self._get_top_moves(self.root_state, moves, 12)
+        # Quick filtering to reduce search space for very large move sets
+        if len(moves) > 15:
+            moves = self._get_top_moves(self.root_state, moves, 15)
         
-        # Handle unlimited time case
-        if time_limit is None:
-            print("🚀 Unlimited tournament mode")
-            return self._unlimited_enhanced_tournament(moves)
-        
-        # Adaptive tournament rounds based on available time and simulations
-        total_sims = self.current_simulations
-        
-        if time_limit >= 8.0 and total_sims >= 1000:
-            return self._three_round_tournament_sims(moves, total_sims)
-        elif time_limit >= 4.0 and total_sims >= 500:
-            return self._two_round_tournament_sims(moves, total_sims)
-        else:
-            return self._single_round_evaluation_sims(moves, total_sims)
+        # Delegate to unified strategy
+        return self._unified_search_strategy(moves, time_limit)
     
-    def _three_round_tournament(self, moves, time_limit):
-        """Traditional three-round tournament."""
-        start_time = time.time()
-        time_per_round = time_limit / 3.0
+    # Core unified tournament system - this is the only tournament method needed
+    def _unified_search_strategy(self, moves, time_limit):
+        """Unified strategy using single 3-round tournament for all cases.
         
-        print(f"🏆 Three-Round Tournament: {len(moves)} moves")
+        Always uses 3-round tournament with configuration (len(moves), 5, 3):
+        - Round 1: Evaluate all moves 
+        - Round 2: Top 5 moves (or fewer if less moves available)
+        - Round 3: Top 3 moves (or fewer if less moves available)
+        """
+        # Get search configuration (always 3-round tournament)
+        config = self._get_search_configuration(moves, time_limit)
         
-        # Round 1: Evaluate all moves
-        round1_scores = {}
-        simulations_per_move = max(100, int(800 / len(moves)))
+        print(f"🔧 Strategy: {config['strategy']} | Budget: {config['simulation_budget']} sims | Rounds: {config['rounds']}")
         
-        for move in moves:
-            if time.time() - start_time > time_per_round:
-                break
-            score = self._evaluate_move_quick(move, simulations_per_move)
-            round1_scores[move] = score
-        
-        # Select top 5 for round 2
-        if len(round1_scores) < 5:
-            top5 = list(round1_scores.keys())
-        else:
-            sorted_moves = sorted(round1_scores.items(), key=lambda x: x[1], reverse=True)
-            top5 = [move for move, _ in sorted_moves[:5]]
-        
-        # Round 2: Deeper evaluation of top 5
-        round2_scores = {}
-        simulations_per_move = 300
-        
-        round2_start = time.time()
-        for move in top5:
-            if time.time() - start_time > 2 * time_per_round:
-                break
-            score = self._evaluate_move_deep(move, simulations_per_move)
-            round2_scores[move] = score
-        
-        # Select top 3 for round 3
-        if len(round2_scores) < 3:
-            top3 = list(round2_scores.keys())
-        else:
-            sorted_moves = sorted(round2_scores.items(), key=lambda x: x[1], reverse=True)
-            top3 = [move for move, _ in sorted_moves[:3]]
-        
-        # Round 3: Final evaluation of top 3
-        final_scores = {}
-        simulations_per_move = 500
-        
-        for move in top3:
-            if time.time() - start_time > time_limit * 0.95:
-                break
-            score = self._evaluate_move_deep(move, simulations_per_move)
-            final_scores[move] = score
-        
-        # Select best move
-        if final_scores:
-            best_move = max(final_scores.items(), key=lambda x: x[1])[0]
-            print(f"✅ Tournament winner: {best_move} with score {final_scores[best_move]:.4f}")
-            return best_move
-        elif round2_scores:
-            return max(round2_scores.items(), key=lambda x: x[1])[0]
-        elif round1_scores:
-            return max(round1_scores.items(), key=lambda x: x[1])[0]
-        else:
-            return moves[0]
+        # Execute unified tournament with the determined configuration
+        return self._execute_unified_tournament(moves, config)
     
-    def _two_round_tournament(self, moves, time_limit):
-        """Two-round tournament for medium time limits."""
-        start_time = time.time()
+    def _get_search_configuration(self, moves, time_limit):
+        """Determine search configuration - always use 3-round tournament."""
+        num_moves = len(moves)
+        total_simulations = self.current_simulations
         
-        # Round 1: Quick evaluation
-        round1_scores = {}
-        simulations_per_move = max(150, int(1000 / len(moves)))
+        # Always use 3-round tournament with (len(moves), 5, 3) configuration
+        config = {
+            'strategy': 'three_round_unified',
+            'simulation_budget': total_simulations,
+            'rounds': 3,
+            'round_ratios': [self.round1_ratio, self.round2_ratio, self.round3_ratio],
+            'candidates_per_round': [num_moves, min(5, num_moves), min(3, num_moves)],
+            'min_sims_per_move': self.min_simulations_per_move
+        }
         
-        for move in moves:
-            if time.time() - start_time > time_limit * 0.6:
-                break
-            score = self._evaluate_move_quick(move, simulations_per_move)
-            round1_scores[move] = score
-        
-        # Select top 5 for round 2
-        if len(round1_scores) <= 5:
-            finalists = list(round1_scores.keys())
-        else:
-            sorted_moves = sorted(round1_scores.items(), key=lambda x: x[1], reverse=True)
-            finalists = [move for move, _ in sorted_moves[:5]]
-        
-        # Round 2: Final evaluation
-        final_scores = {}
-        simulations_per_move = 400
-        
-        for move in finalists:
-            if time.time() - start_time > time_limit * 0.95:
-                break
-            score = self._evaluate_move_deep(move, simulations_per_move)
-            final_scores[move] = score
-        
-        if final_scores:
-            return max(final_scores.items(), key=lambda x: x[1])[0]
-        elif round1_scores:
-            return max(round1_scores.items(), key=lambda x: x[1])[0]
-        else:
-            return moves[0]
+        return config
     
-    def _single_round_evaluation(self, moves, time_limit):
-        """Single round evaluation for limited time."""
-        move_scores = {}
-        simulations_per_move = max(200, int(1500 / len(moves)))
-        start_time = time.time()
-        
-        for move in moves:
-            if time.time() - start_time > time_limit * 0.9:
-                break
-            score = self._evaluate_move_quick(move, simulations_per_move)
-            move_scores[move] = score
-        
-        if move_scores:
-            return max(move_scores.items(), key=lambda x: x[1])[0]
-        else:
-            return moves[0]
-    
-    def _three_round_tournament_sims(self, moves, total_simulations):
-        """Three-round tournament with simulation-based distribution."""
+    def _execute_unified_tournament(self, moves, config):
+        """Execute unified tournament with given configuration."""
         if not moves:
             return None
         if len(moves) == 1:
             return moves[0]
             
-        print(f"🏆 Three-Round Tournament: {len(moves)} moves, {total_simulations} total sims")
+        strategy = config['strategy']
+        rounds = config['rounds']
+        round_ratios = config['round_ratios']
+        candidates_per_round = config['candidates_per_round']
+        total_simulations = config['simulation_budget']
         
-        # Calculate simulations for each round
-        round1_sims = max(1, int(total_simulations * self.round1_ratio))
-        round2_sims = max(1, int(total_simulations * self.round2_ratio))
-        round3_sims = max(1, int(total_simulations * self.round3_ratio))
+        print(f"🏆 {strategy.replace('_', ' ').title()} Tournament: {len(moves)} moves, {total_simulations} total sims")
         
-        # Round 1: Evaluate all moves
-        round1_sims_per_move = max(
-            self.min_simulations_per_move,
-            round1_sims // len(moves)
-        )
+        current_moves = moves[:]
+        round_scores = {}
         
-        print(f"  Round 1: {len(moves)} moves × {round1_sims_per_move} sims = {len(moves) * round1_sims_per_move}")
-        
-        round1_scores = {}
-        for move in moves:
-            score = self._evaluate_move_with_simulations(move, round1_sims_per_move)
-            round1_scores[move] = score
-        
-        # Select top 5 for round 2
-        if len(round1_scores) <= 5:
-            top5 = list(round1_scores.keys())
-        else:
-            sorted_moves = sorted(round1_scores.items(), key=lambda x: x[1], reverse=True)
-            top5 = [move for move, _ in sorted_moves[:5]]
-        
-        # Round 2: Deeper evaluation of top 5
-        round2_sims_per_move = max(
-            self.min_simulations_per_move,
-            round2_sims // len(top5)
-        )
-        
-        print(f"  Round 2: {len(top5)} moves × {round2_sims_per_move} sims = {len(top5) * round2_sims_per_move}")
-        
-        round2_scores = {}
-        for move in top5:
-            score = self._evaluate_move_with_simulations(move, round2_sims_per_move)
-            round2_scores[move] = score
-        
-        # Select top 3 for round 3
-        if len(round2_scores) <= 3:
-            top3 = list(round2_scores.keys())
-        else:
-            sorted_moves = sorted(round2_scores.items(), key=lambda x: x[1], reverse=True)
-            top3 = [move for move, _ in sorted_moves[:3]]
-        
-        # Round 3: Final evaluation of top 3
-        round3_sims_per_move = max(
-            self.min_simulations_per_move,
-            round3_sims // len(top3)
-        )
-        
-        print(f"  Round 3: {len(top3)} moves × {round3_sims_per_move} sims = {len(top3) * round3_sims_per_move}")
-        
-        final_scores = {}
-        for move in top3:
-            score = self._evaluate_move_with_simulations(move, round3_sims_per_move)
-            final_scores[move] = score
-        
-        # Select best move
-        if final_scores:
-            best_move = max(final_scores.items(), key=lambda x: x[1])[0]
-            best_score = final_scores[best_move]
-            print(f"✅ Tournament winner: {best_move} with score {best_score:.4f}")
+        for round_num in range(rounds):
+            # Each round gets the full budget (not multiplied)
+            round_budget = total_simulations
+            target_candidates = candidates_per_round[round_num] 
             
-            # Print simulation distribution summary
-            total_used = (len(moves) * round1_sims_per_move + 
-                         len(top5) * round2_sims_per_move + 
-                         len(top3) * round3_sims_per_move)
-            print(f"📊 Simulations used: {total_used}/{total_simulations} ({total_used/total_simulations:.1%})")
+            # Each move in this round gets the full budget
+            sims_per_move = max(config['min_sims_per_move'], round_budget)
+            actual_round_sims = sims_per_move * len(current_moves)
+            
+            print(f"  Round {round_num + 1}: {len(current_moves)} moves × {sims_per_move} sims = {actual_round_sims} (budget: {round_budget})")
+            
+            # Evaluate all moves in current round
+            round_scores = {}
+            for i, move in enumerate(current_moves):
+                score = self._evaluate_move_with_simulations(move, sims_per_move)
+                round_scores[move] = score
+            
+            # Select candidates for next round (if not final round)
+            if round_num < rounds - 1:
+                # Always select exactly target_candidates for next round
+                sorted_moves = sorted(round_scores.items(), key=lambda x: x[1], reverse=True)
+                next_round_candidates = candidates_per_round[round_num + 1]
+                current_moves = [move for move, _ in sorted_moves[:next_round_candidates]]
+                    
+                print(f"Advanced to next round: {len(current_moves)} moves")
+        
+        # Select final best move
+        if round_scores:
+            best_move = max(round_scores.items(), key=lambda x: x[1])[0]
+            best_score = round_scores[best_move]
+            
+            # Calculate simulation utilization 
+            total_used = 0
+            for i in range(rounds):
+                round_budget = total_simulations
+                round_moves = candidates_per_round[i]
+                sims_per_move = max(config['min_sims_per_move'], round_budget)
+                total_used += sims_per_move * round_moves
+            
+            print(f"📊 Total simulations used: {total_used} across {rounds} rounds (each round gets full budget)")
+            print(f"✅ {strategy.replace('_', ' ').title()} winner: {best_move} with score {best_score:.6f}")
             
             return best_move
         
         return moves[0] if moves else None
-    
-    def _two_round_tournament_sims(self, moves, total_simulations):
-        """Two-round tournament with simulation distribution."""
-        if not moves:
-            return None
-        if len(moves) == 1:
-            return moves[0]
-            
-        print(f"🥈 Two-Round Tournament: {len(moves)} moves, {total_simulations} total sims")
-        
-        # Split simulations: 60% round 1, 40% round 2
-        round1_sims = max(1, int(total_simulations * 0.6))
-        round2_sims = max(1, int(total_simulations * 0.4))
-        
-        # Round 1: Evaluate all moves
-        round1_sims_per_move = max(
-            self.min_simulations_per_move,
-            round1_sims // len(moves)
-        )
-        
-        round1_scores = {}
-        for move in moves:
-            score = self._evaluate_move_with_simulations(move, round1_sims_per_move)
-            round1_scores[move] = score
-        
-        # Select top 5 for round 2
-        if len(round1_scores) <= 5:
-            finalists = list(round1_scores.keys())
-        else:
-            sorted_moves = sorted(round1_scores.items(), key=lambda x: x[1], reverse=True)
-            finalists = [move for move, _ in sorted_moves[:5]]
-        
-        # Round 2: Final evaluation
-        round2_sims_per_move = max(
-            self.min_simulations_per_move,
-            round2_sims // len(finalists)
-        )
-        
-        final_scores = {}
-        for move in finalists:
-            score = self._evaluate_move_with_simulations(move, round2_sims_per_move)
-            final_scores[move] = score
-        
-        if final_scores:
-            best_move = max(final_scores.items(), key=lambda x: x[1])[0]
-            print(f"✅ Two-round winner: {best_move}")
-            return best_move
-        
-        return moves[0]
-    
-    def _single_round_evaluation_sims(self, moves, total_simulations):
-        """Single round evaluation with simulation distribution."""
-        if not moves:
-            return None
-        if len(moves) == 1:
-            return moves[0]
-            
-        print(f"🥉 Single Round: {len(moves)} moves, {total_simulations} total sims")
-        
-        simulations_per_move = max(
-            self.min_simulations_per_move,
-            total_simulations // len(moves)
-        )
-        
-        move_scores = {}
-        for move in moves:
-            score = self._evaluate_move_with_simulations(move, simulations_per_move)
-            move_scores[move] = score
-        
-        if move_scores:
-            best_move = max(move_scores.items(), key=lambda x: x[1])[0]
-            print(f"✅ Single round winner: {best_move}")
-            return best_move
-        
-        return moves[0]
     
     def _evaluate_move_with_simulations(self, move, simulations):
         """Evaluate a single move with specified number of simulations."""
@@ -904,6 +662,7 @@ class MonteCarloDomain(MonteCarloBase):
         """Set custom simulation parameters."""
         if simulations is not None:
             self.base_simulations = min(simulations, self.max_simulations)
+            self.current_simulations = self.base_simulations
             
         if round1_ratio is not None:
             self.round1_ratio = round1_ratio
@@ -1062,144 +821,6 @@ class MonteCarloDomain(MonteCarloBase):
         print(f"  Cache misses: {self.stats['cache_misses']}")
         hit_rate = self.stats['cache_hits'] / max(1, self.stats['cache_hits'] + self.stats['cache_misses'])
         print(f"  Hit rate: {hit_rate:.2%}")
-    
-    def _unlimited_simulation_search(self):
-        """Unlimited simulation search using configurable simulation distribution."""
-        moves = self.root_state.get_all_possible_moves()
-        
-        if not moves:
-            return None
-        if len(moves) == 1:
-            return moves[0]
-        
-        # Use maximum simulations for unlimited mode
-        total_simulations = self.current_simulations
-        print(f"🔥 Unlimited Simulation Mode: {len(moves)} moves, {total_simulations} total sims")
-        
-        # Choose strategy based on number of moves
-        if len(moves) <= 5:
-            # Direct deep evaluation for few moves
-            return self._unlimited_direct_evaluation(moves, total_simulations)
-        elif len(moves) <= 12:
-            # Enhanced three-round tournament
-            return self._unlimited_three_round_tournament(moves, total_simulations)
-        else:
-            # Filter to top moves first, then tournament
-            top_moves = self._get_top_moves(self.root_state, moves, 15)
-            return self._unlimited_three_round_tournament(top_moves, total_simulations)
-    
-    def _unlimited_direct_evaluation(self, moves, total_simulations):
-        """Direct evaluation with unlimited simulations for few moves."""
-        if not moves:
-            return None
-        if len(moves) == 1:
-            return moves[0]
-            
-        move_scores = {}
-        simulations_per_move = total_simulations // len(moves)
-        
-        print(f"🎯 Direct Unlimited Evaluation: {len(moves)} moves × {simulations_per_move} sims each")
-        
-        for i, move in enumerate(moves):
-            print(f"  Evaluating move {i+1}/{len(moves)}: {move}")
-            score = self._evaluate_move_with_simulations(move, simulations_per_move)
-            move_scores[move] = score
-            print(f"    Score: {score:.6f}")
-        
-        best_move = max(move_scores.items(), key=lambda x: x[1])[0]
-        best_score = move_scores[best_move]
-        print(f"✅ Best unlimited move: {best_move} with score {best_score:.6f}")
-        return best_move
-    
-    def _unlimited_three_round_tournament(self, moves, total_simulations):
-        """Enhanced three-round tournament using configurable simulation ratios."""
-        if not moves:
-            return None
-        if len(moves) == 1:
-            return moves[0]
-            
-        print(f"🏆 Unlimited Three-Round Tournament: {len(moves)} moves, {total_simulations} total sims")
-        
-        # Use the same ratio distribution as regular tournament
-        round1_sims = max(1, int(total_simulations * self.round1_ratio))
-        round2_sims = max(1, int(total_simulations * self.round2_ratio))
-        round3_sims = max(1, int(total_simulations * self.round3_ratio))
-        
-        print(f"  Distribution: R1={round1_sims} ({self.round1_ratio:.1%}), R2={round2_sims} ({self.round2_ratio:.1%}), R3={round3_sims} ({self.round3_ratio:.1%})")
-        
-        # Round 1: Evaluate all moves
-        round1_sims_per_move = max(
-            self.min_simulations_per_move,
-            round1_sims
-        )
-        
-        print(f"  Round 1: {len(moves)} moves × {round1_sims_per_move} sims each")
-        round1_scores = {}
-        for i, move in enumerate(moves):
-            print(f"    Evaluating {i+1}/{len(moves)}: {move}")
-            score = self._evaluate_move_with_simulations(move, round1_sims_per_move)
-            round1_scores[move] = score
-            print(f"      Score: {score:.6f}")
-        
-        # Select top candidates for round 2 (more generous selection)
-        num_round2 = min(8, max(5, len(moves) // 2))
-        if len(round1_scores) <= num_round2:
-            round2_moves = list(round1_scores.keys())
-        else:
-            sorted_moves = sorted(round1_scores.items(), key=lambda x: x[1], reverse=True)
-            round2_moves = [move for move, _ in sorted_moves[:num_round2]]
-        
-        # Round 2: Deeper evaluation
-        round2_sims_per_move = max(
-            self.min_simulations_per_move,
-            round2_sims
-        )
-        
-        print(f"  Round 2: {len(round2_moves)} moves × {round2_sims_per_move} sims each")
-        round2_scores = {}
-        for i, move in enumerate(round2_moves):
-            print(f"    Deep evaluating {i+1}/{len(round2_moves)}: {move}")
-            score = self._evaluate_move_with_simulations(move, round2_sims_per_move)
-            round2_scores[move] = score
-            print(f"      Score: {score:.6f}")
-        
-        # Select top 3 for final round
-        num_round3 = min(3, len(round2_moves))
-        if len(round2_scores) <= num_round3:
-            final_moves = list(round2_scores.keys())
-        else:
-            sorted_moves = sorted(round2_scores.items(), key=lambda x: x[1], reverse=True)
-            final_moves = [move for move, _ in sorted_moves[:num_round3]]
-        
-        # Round 3: Maximum depth evaluation
-        round3_sims_per_move = max(
-            self.min_simulations_per_move,
-            round3_sims
-        )
-        
-        print(f"  Round 3: {len(final_moves)} moves × {round3_sims_per_move} sims each")
-        final_scores = {}
-        for i, move in enumerate(final_moves):
-            print(f"    Final evaluating {i+1}/{len(final_moves)}: {move}")
-            score = self._evaluate_move_with_simulations(move, round3_sims_per_move)
-            final_scores[move] = score
-            print(f"      Final score: {score:.6f}")
-        
-        # Select best move
-        if final_scores:
-            best_move = max(final_scores.items(), key=lambda x: x[1])[0]
-            best_score = final_scores[best_move]
-            
-            # Print summary
-            total_used = (len(moves) * round1_sims_per_move + 
-                         len(round2_moves) * round2_sims_per_move + 
-                         len(final_moves) * round3_sims_per_move)
-            print(f"📊 Unlimited tournament used: {total_used}/{total_simulations} ({total_used/total_simulations:.1%})")
-            print(f"🎉 Unlimited tournament winner: {best_move} with score {best_score:.6f}")
-            
-            return best_move
-        
-        return moves[0]
     
     def _evaluate_move_deep(self, move, simulations):
         """Deep evaluation of a move with specified simulations using enhanced MCTS."""

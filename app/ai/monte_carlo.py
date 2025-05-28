@@ -10,7 +10,7 @@ from .monte_carlo_base import MonteCarloBase
 from .monte_carlo_domain import MonteCarloDomain
 from .alpha_beta_monte_carlo import AlphaBetaMonteCarlo
 from .minimax_player import MinimaxPlayer
-from app.ai.constants import MC_TYPE_BASIC, MC_TYPE_DOMAIN, MC_TYPE_ALPHA_BETA, MC_TYPE_MINIMAX
+from app.ai.constants import MC_TYPE_BASIC, MC_TYPE_DOMAIN, MC_TYPE_ALPHA_BETA, MC_TYPE_MINIMAX, MOVE_WEIGHTS
 
 def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations=600,
                           switch_threshold=31, use_simulation_formula=False,
@@ -52,6 +52,7 @@ def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations
         S2 = int(number_simulations * s2_ratio)
         S3 = int(number_simulations * s3_ratio)
         kwargs['tournament_sizes'] = [S1, S2, S3]
+        kwargs['s1'], kwargs['s2'], kwargs['s3'], kwargs['s4'] = MOVE_WEIGHTS.values()
         return MonteCarloDomain(game_state, time_limit=time_limit, **kwargs)
     
     elif mc_type == MC_TYPE_ALPHA_BETA:
@@ -60,6 +61,7 @@ def get_monte_carlo_player(game_state, mc_type=MC_TYPE_BASIC, number_simulations
         S2 = int(number_simulations * s2_ratio)
         S3 = int(number_simulations * s3_ratio)
         kwargs['tournament_sizes'] = [S1, S2, S3]
+        kwargs['s1'], kwargs['s2'], kwargs['s3'], kwargs['s4'] = MOVE_WEIGHTS.values()
         return AlphaBetaMonteCarlo(game_state, time_limit=time_limit, **kwargs)
         
     elif mc_type == MC_TYPE_MINIMAX:

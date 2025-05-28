@@ -29,10 +29,10 @@ BOARD_TOTAL_CELLS = BOARD_SIZE * BOARD_SIZE  # Total number of cells (7x7 = 49)
 
 # Minimax move weights (used in minimax.py)
 MOVE_WEIGHTS = {
-    "capture": 1.0,  # s1: Weight for captured opponent pieces
-    "target_surroundings": 0.4,  # s2: Weight for own pieces around target
-    "clone_bonus": 0.7,  # s3: Bonus for clone moves
-    "jump_penalty": 0.4   # s4: Penalty for leaving own pieces around jump source
+    "capture": 1.2,  # s1: Weight for captured opponent pieces
+    "target_surroundings": 0.6,  # s2: Weight for own pieces around target (increased)
+    "clone_bonus": 1.5,  # s3: Bonus for clone moves (significantly increased)
+    "jump_penalty": 0.4   # s4: Penalty for leaving own pieces around jump source (increased)
 }
 
 REPEAT_THRESHOLD = 3  # A position appearing 3 times ends the game
