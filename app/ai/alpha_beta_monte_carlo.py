@@ -24,7 +24,7 @@ class AlphaBetaMonteCarlo:
         Args:
             state: Initial game state
             **kwargs: Configuration parameters including:
-                - switch_threshold: Number of empty spaces at which to switch algorithms (default: 31)
+                - switch_threshold: Number of empty spaces at which to switch algorithms (default: 25)
                 - minimax_depth: Search depth for Minimax algorithm (default: 4)
                 - Other parameters are passed to the Monte Carlo algorithm
         """
