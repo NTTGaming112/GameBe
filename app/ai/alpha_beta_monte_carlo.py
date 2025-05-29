@@ -24,13 +24,13 @@ class AlphaBetaMonteCarlo:
         Args:
             state: Initial game state
             **kwargs: Configuration parameters including:
-                - switch_threshold: Number of empty spaces at which to switch algorithms (default: 25)
+                - switch_threshold: Number of empty spaces at which to switch algorithms (default: 18)
                 - minimax_depth: Search depth for Minimax algorithm (default: 4)
                 - Other parameters are passed to the Monte Carlo algorithm
         """
         self.state = state
         self.board = Board()
-        self.switch_threshold = kwargs.get('switch_threshold', 25)
+        self.switch_threshold = kwargs.get('switch_threshold', 18)
         self.mcd = MonteCarloDomain(state, **kwargs)
         self.minimax_depth = kwargs.get('minimax_depth', 4)
         
