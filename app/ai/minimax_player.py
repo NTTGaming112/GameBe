@@ -6,7 +6,7 @@ Minimax player implementation for Ataxx AI.
 This module provides a wrapper for the Minimax algorithm to be used with the same
 interface as the Monte Carlo players.
 """
-from app.ai.constants import CLONE_MOVE
+from app.ai.constants import CLONE_MOVE, PLAYER_ONE, PLAYER_TWO
 from .minimax import minimax
 from .board import Board, StateMinimax
 
@@ -17,7 +17,7 @@ class MinimaxPlayer:
     This class implements the Alpha-Beta Minimax algorithm with the same interface
     as the Monte Carlo players to be compatible with the API.
     """
-    def __init__(self, state, depth=4, time_limit=50):
+    def __init__(self, state, depth=4, time_limit=None):
         """
         Initialize the Minimax player.
         
@@ -30,6 +30,15 @@ class MinimaxPlayer:
         self.depth = depth
         self.time_limit = time_limit
         self.board = Board()
+
+    def get_play(self):
+        """
+        Get the best move for the current player.
+        
+        Returns:
+            The best move found by the algorithm
+        """
+        return self.get_move(self.time_limit)
     
     def get_move(self, time_limit=None):
         """
@@ -62,47 +71,31 @@ class MinimaxPlayer:
         if not best_move:
             return None
             
-        # Convert the move format to match the API
-        if best_move[0] == CLONE_MOVE:  # Clone move
-            from_pos = best_move[2]
-            to_pos = best_move[1]
-        else:  # Jump move
-            from_pos = best_move[2]
-            to_pos = best_move[1]
-            
-        return (from_pos, to_pos)
+        # The move format is already (from_pos, to_pos) where from_pos can be None for clones
+        # No conversion needed since minimax now returns the correct format
+        return best_move
         
     def _convert_state(self, ataxx_state):
         """
         Convert Ataxx state to StateMinimax.
         
         Args:
-            ataxx_state: Ataxx state from the API
+            ataxx_state: Ataxx state object
             
         Returns:
             StateMinimax object that can be used with the minimax algorithm
         """
-        # Convert board format
-        board_array = []
-        for row in ataxx_state.board:
-            board_row = []
-            for cell in row:
-                # Accept both int and str for compatibility
-                if cell == 'red' or cell == 1:
-                    board_row.append(1)
-                elif cell == 'yellow' or cell == -1:
-                    board_row.append(-1)
-                else:
-                    board_row.append(0)
-            board_array.append(board_row)
+        # Get 2D board array from Ataxx bitboards
+        board_array = ataxx_state.get_board_array()
         
-        # Convert player
-        player = 1 if ataxx_state.current_player == 'red' else -1
+        # Get current player
+        player = ataxx_state.current_player()
         
-        # Count pieces
-        red_count = sum(row.count(1) for row in board_array)
-        yellow_count = sum(row.count(-1) for row in board_array)
-        balls = {1: red_count, -1: yellow_count}
+        # Get piece counts directly from ataxx_state
+        balls = {
+            PLAYER_ONE: ataxx_state.balls[PLAYER_ONE],
+            PLAYER_TWO: ataxx_state.balls[PLAYER_TWO]
+        }
         
         # Create StateMinimax with required arguments
         minimax_state = StateMinimax(board_array, player, balls)
