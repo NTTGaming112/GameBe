@@ -1,7 +1,3 @@
-import random
-import numpy as np
-from collections import deque as dl
-
 from app.ai.constants import (BOARD_SIZE, PLAYER_ONE, PLAYER_TWO, EMPTY_CELL, REPEAT_THRESHOLD)
 
 class Ataxx:

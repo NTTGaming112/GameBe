@@ -83,14 +83,6 @@ COMPONENT_WEIGHTS = {
     'strategic': 1.0    # Weight for strategic evaluation (tempo, mobility, connectivity)
 }
 
-# Heuristic Formula Coefficients: H = s1×C + s2×A + s3×B - s4×P
-HEURISTIC_COEFFS = {
-    's1': 1.2,  # Clone detection weight (C)
-    's2': 0.8,  # Attack weight (A)
-    's3': 1.5,  # Clone bonus weight (B)  
-    's4': 2.0   # Jump penalty weight (P)
-}
-
 # Phase-adaptive Heuristic Formula Coefficients
 PHASE_ADAPTIVE_HEURISTIC_COEFFS = {
     'early': {
@@ -135,4 +127,3 @@ MCD_PHASE_WEIGHTS = {
     'mid': {'alpha': 0.3, 'beta': 0.3, 'gamma': 0.3, 'delta': 0.1}, 
     'late': {'alpha': 0.2, 'beta': 0.2, 'gamma': 0.2, 'delta': 0.4}
 }
-

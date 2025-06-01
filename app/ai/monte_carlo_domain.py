@@ -27,12 +27,10 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from .monte_carlo_base import MonteCarloBase
 from app.ai.ataxx_state import Ataxx, PLAYER_ONE, PLAYER_TWO
 from .constants import (
-    TOURNAMENT_CONFIG, 
-    HEURISTIC_COEFFS, PHASE_BONUS_PENALTY, MCD_PHASE_WEIGHTS,
+    TOURNAMENT_CONFIG, PHASE_BONUS_PENALTY, MCD_PHASE_WEIGHTS,
     ADJACENT_POSITIONS, JUMP_POSITIONS, TEMPERATURE_SCHEDULE, COMPONENT_WEIGHTS,
     PHASE_ADAPTIVE_HEURISTIC_COEFFS, WIN_BONUS_EARLY, WIN_BONUS_FULL_BOARD
 )
-
 
 def softmax_with_temperature(scores, temperature=1.0):
     """
@@ -50,6 +48,8 @@ def softmax_with_temperature(scores, temperature=1.0):
     Returns:
         List of probabilities summing to 1.0
     """
+
+    temperature = TEMPERATURE_SCHEDULE[scores[0].get('phase', 'mid')] if isinstance(scores[0], dict) else temperature
     if not scores:
         return []
     
@@ -516,11 +516,12 @@ class MonteCarloDomain(MonteCarloBase):
         P = self._calculate_jump_penalty(from_pos, to_pos, phase)
         
         # Apply heuristic formula
-        h_raw = (HEURISTIC_COEFFS['s1'] * C + 
-                HEURISTIC_COEFFS['s2'] * A + 
-                HEURISTIC_COEFFS['s3'] * B - 
-                HEURISTIC_COEFFS['s4'] * P)
-        
+        heuristic_coeffs = PHASE_ADAPTIVE_HEURISTIC_COEFFS[phase]
+        h_raw = (heuristic_coeffs['s1'] * C + 
+                heuristic_coeffs['s2'] * A + 
+                heuristic_coeffs['s3'] * B - 
+                heuristic_coeffs['s4'] * P)
+
         # Sigmoid normalization
         return self._sigmoid_normalize(h_raw)
     
