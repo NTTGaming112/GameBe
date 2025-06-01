@@ -71,19 +71,17 @@ class MonteCarloBase:
             return node, result
 
         while simulation_count < simulations and (time_limit is None or time.time() - start_time < time_limit):
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-                futures = [executor.submit(run_simulation) for _ in range(min(batch_size, simulations - simulation_count))]
-                for future in concurrent.futures.as_completed(futures):
-                    node, result = future.result()
-                    if node is None:
-                        continue
-                    while node:
-                        node.update(result)
-                        node = node.parent
-                        result = 1 - result
-                    simulation_count += 1
-                    if time_limit and time.time() - start_time >= time_limit:
-                        break
+            for _ in range(min(batch_size, simulations - simulation_count)):
+                node, result = run_simulation()
+                if node is None:
+                    continue
+                while node:
+                    node.update(result)
+                    node = node.parent
+                    result = 1 - result
+                simulation_count += 1
+                if time_limit and time.time() - start_time >= time_limit:
+                    break
 
         if not root.children:
             # If no children were expanded, try to get any valid move from current state

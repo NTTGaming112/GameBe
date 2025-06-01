@@ -1134,45 +1134,6 @@ class MonteCarloDomain(MonteCarloBase):
         
         return score
     
-    def _get_cached_eval(self, state, player):
-        """Get cached evaluation if exists"""
-        state_key = (state.player1_board, state.player2_board, player)
-        return self.eval_cache.get(state_key)
-    
-    def _cache_eval(self, state, player, score):
-        """Cache evaluation result"""
-        state_key = (state.player1_board, state.player2_board, player)
-        self.eval_cache[state_key] = score
-        
-    def _evaluate_final_position(self, state, player):
-        """Enhanced final position evaluation with caching"""
-        cached_score = self._get_cached_eval(state, player)
-        if cached_score is not None:
-            return cached_score
-        
-        num_own = state.balls[player]
-        num_opp = state.balls[-player]
-        score = num_own - num_opp
-        
-        if state.is_game_over():
-            winner = state.get_winner()
-            if winner == player:
-                total_pieces = num_own + num_opp
-                empty_spaces = 49 - total_pieces
-                score += WIN_BONUS_FULL_BOARD if empty_spaces == 0 else WIN_BONUS_EARLY
-            elif winner == -player:
-                total_pieces = num_own + num_opp
-                empty_spaces = 49 - total_pieces
-                score -= WIN_BONUS_FULL_BOARD if empty_spaces == 0 else WIN_BONUS_EARLY
-            elif winner == 100:  # Draw
-                score = 0
-        
-        # Normalize score to [0, 1] range
-        score = (score + 549) / 1098
-        
-        self._cache_eval(state, player, score)
-        return score
-    
     def analyze_temperature_effects(self, temperatures=[0.1, 0.5, 1.0, 2.0, 5.0]):
         """
         Analyze the effects of different temperature values on move selection
