@@ -47,18 +47,19 @@ class MonteCarloBase:
             undo_stack = []
             
             # Selection and expansion
-            while not node.untried_moves and node.children:
+            while (not node.untried_moves or len(node.untried_moves) == 0) and node.children:
                 node = node.select_child()
                 if node.move:  # Only apply move if it's not None
                     undo_stack.append(state.apply_move_with_undo(node.move))
                     
-            if node.untried_moves:
-                node = node.expand()
-                if node is None:
-                    # Undo any moves we applied
+            if node.untried_moves and len(node.untried_moves) > 0:
+                expanded_node = node.expand()
+                if expanded_node is None:
+                    # Expansion failed - undo any moves we applied
                     for undo_info in reversed(undo_stack):
                         state.undo_move(undo_info)
                     return None, None
+                node = expanded_node
                 if node.move:  # Only apply move if it's not None
                     undo_stack.append(state.apply_move_with_undo(node.move))
                     
@@ -118,7 +119,7 @@ class MonteCarloBase:
     def _simulate(self, state, player):
         undo_stack = []
         simulation_depth = 0
-        max_simulation_depth = 8
+        max_simulation_depth = 20
         moves_buffer = []
         consecutive_passes = 0
         

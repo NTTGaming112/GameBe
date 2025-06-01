@@ -78,13 +78,14 @@ def run_full_game(algo1="Minimax", algo2="MCD", max_moves=None,
     algo1_times = []
     algo2_times = []
     game_log = []
+    consecutive_none_moves = 0  # Track consecutive None moves
     
     if verbose:
         print(f"\n=== Starting Game: {algo1} vs {algo2} ===")
         print(f"Initial board:")
         game.print_board()
     
-    while not game.is_game_over() and (max_moves is None or move_count < max_moves):
+    while not game.is_game_over() and (max_moves is None or move_count < max_moves) and consecutive_none_moves < 2:
         current_player = game.current_player()
         
         algo = algo1 if current_player == 1 else algo2
@@ -117,13 +118,17 @@ def run_full_game(algo1="Minimax", algo2="MCD", max_moves=None,
         if move:
             game.move_with_position(move)
             game_log.append((current_player, move))
+            consecutive_none_moves = 0  # Reset counter on valid move
             
             if verbose:
                 print("\nBoard after move:")
                 game.print_board()
         else:
+            consecutive_none_moves += 1  # Increment counter for None move
             if verbose:
                 print("No valid move found, skipping turn.")
+                if consecutive_none_moves >= 2:
+                    print("Two consecutive players with no moves - game should end.")
             # Only toggle player when no move is available, as move_with_position() already handles it for valid moves
             game.toggle_player()
         

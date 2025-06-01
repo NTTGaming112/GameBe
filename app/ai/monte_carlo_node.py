@@ -35,9 +35,19 @@ class MonteCarloNode:
         return max(self.children, key=lambda c: c.uct_value())
 
     def expand(self):
-        if not self.untried_moves:
+        # Multiple safety checks for untried_moves
+        if not hasattr(self, 'untried_moves') or self.untried_moves is None:
             return None
-        move = self.untried_moves.pop(0)
+            
+        if not self.untried_moves or len(self.untried_moves) == 0:
+            return None
+        
+        try:
+            move = self.untried_moves.pop(0)
+        except IndexError:
+            # This should not happen with our checks above, but just in case
+            return None
+            
         undo_info = self.state.apply_move_with_undo(move)
         child = MonteCarloNode(self.state, self, move, self.mcd_instance)
         self.children.append(child)

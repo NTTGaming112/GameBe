@@ -53,18 +53,27 @@ MC_TYPE_DOMAIN = "MCD"         # Monte Carlo with Domain Knowledge
 MC_TYPE_ALPHA_BETA = "AB+MCD"  # Hybrid: Alpha-Beta + Monte Carlo Domain
 MC_TYPE_MINIMAX = "MINIMAX"    # Alpha-Beta Minimax
 
-# Phase-based dynamic weights for heuristic formula S(m,s,p) = s1×C + s2×A + s3×B - s4×P
-PHASE_WEIGHTS = {
-    'opening': {'s1': 0.8, 's2': 1.2, 's3': 0.6, 's4': 1.0},
-    'midgame': {'s1': 1.0, 's2': 1.0, 's3': 1.0, 's4': 1.0},
-    'endgame': {'s1': 1.2, 's2': 0.8, 's3': 1.4, 's4': 1.2}
+
+
+# =================== MONTE CARLO DOMAIN CONSTANTS ===================
+
+# Tournament System Configuration
+TOURNAMENT_CONFIG = {
+    'K1': 8,  # Top moves advance from Round 1
+    'K2': 4,  # Top moves advance from Round 2
+    'ROUND1_SIM_RATIO': 1.0,  # Round 1: 100% of base_simulations
+    'ROUND2_SIM_RATIO': 1.5,  # Round 2: 150% of base_simulations
+    'ROUND3_SIM_RATIO': 2.0,  # Round 3: 200% of base_simulations
+    'PARALLEL_THRESHOLD': 6,
+    'MAX_WORKERS': 4,
+    'SIGMOID_FACTOR': 4.0
 }
 
 # Temperature schedule for softmax move selection
 TEMPERATURE_SCHEDULE = {
-    'opening': 2.0,   # High exploration in opening
-    'midgame': 1.0,   # Balanced exploration/exploitation  
-    'endgame': 0.1    # Low exploration in endgame (more deterministic)
+    'early': 2.0,   # High exploration in early
+    'mid': 1.0,   # Balanced exploration/exploitation  
+    'late': 0.1    # Low exploration in late (more deterministic)
 }
 
 # Component weights for comprehensive move evaluation
@@ -72,5 +81,58 @@ COMPONENT_WEIGHTS = {
     'heuristic': 1.0,   # Weight for S(m,s,p) heuristic formula
     'tactical': 1.0,    # Weight for tactical evaluation (safety, corners, captures)
     'strategic': 1.0    # Weight for strategic evaluation (tempo, mobility, connectivity)
+}
+
+# Heuristic Formula Coefficients: H = s1×C + s2×A + s3×B - s4×P
+HEURISTIC_COEFFS = {
+    's1': 1.2,  # Clone detection weight (C)
+    's2': 0.8,  # Attack weight (A)
+    's3': 1.5,  # Clone bonus weight (B)  
+    's4': 2.0   # Jump penalty weight (P)
+}
+
+# Phase-adaptive Heuristic Formula Coefficients
+PHASE_ADAPTIVE_HEURISTIC_COEFFS = {
+    'early': {
+        's1': 1.0,  # Lower capture weight in early game (focus on expansion)
+        's2': 1.2,  # Higher attack weight for territory control
+        's3': 2.0,  # High clone bonus for expansion
+        's4': 1.0   # Lower jump penalty for mobility
+    },
+    'mid': {
+        's1': 1.2,  # Balanced capture weight
+        's2': 0.8,  # Moderate attack weight
+        's3': 1.5,  # Moderate clone bonus
+        's4': 2.0   # Standard jump penalty
+    },
+    'late': {
+        's1': 1.5,  # Higher capture weight in endgame
+        's2': 0.6,  # Lower attack weight (focus on captures)
+        's3': 1.0,  # Lower clone bonus (efficiency over expansion)
+        's4': 2.5   # Higher jump penalty (avoid risky moves)
+    }
+}
+
+# Phase-adaptive Clone Bonus and Jump Penalty
+PHASE_BONUS_PENALTY = {
+    'early': {
+        'clone_bonus': 1.2,    # High bonus for expansion in early game
+        'jump_penalty': 0.2    # Low penalty for mobility in early game
+    },
+    'mid': {
+        'clone_bonus': 0.8,    # Moderate bonus in mid game
+        'jump_penalty': 0.4    # Moderate penalty in mid game
+    },
+    'late': {
+        'clone_bonus': 0.5,    # Lower bonus in late game (focus on efficiency)
+        'jump_penalty': 0.6    # Higher penalty in late game (avoid risky jumps)
+    }
+}
+
+# Phase-adaptive Component Weights (Tournament System)
+MCD_PHASE_WEIGHTS = {
+    'early': {'alpha': 0.4, 'beta': 0.3, 'gamma': 0.2, 'delta': 0.1},
+    'mid': {'alpha': 0.3, 'beta': 0.3, 'gamma': 0.3, 'delta': 0.1}, 
+    'late': {'alpha': 0.2, 'beta': 0.2, 'gamma': 0.2, 'delta': 0.4}
 }
 
