@@ -3,6 +3,7 @@ import random
 import time
 import concurrent.futures
 from collections import OrderedDict
+import threading
 
 from .monte_carlo_node import MonteCarloNode
 from app.ai.constants import WIN_BONUS_EARLY, WIN_BONUS_FULL_BOARD, PLAYER_ONE, PLAYER_TWO
@@ -17,6 +18,7 @@ class MonteCarloBase:
         self.time_limit = kwargs.get('time_limit', 50)
         self.eval_cache = OrderedDict()
         self.max_cache_size = 1000
+        self.cache_lock = threading.Lock()
 
     def calculate_simulations(self, state):
         total_pieces = state.balls[PLAYER_ONE] + state.balls[PLAYER_TWO]
@@ -142,11 +144,17 @@ class MonteCarloBase:
         return reward
 
     def _cache_eval(self, state, player, score):
+        """Thread-safe cache evaluation with proper OrderedDict usage"""
         state_key = (state.player1_board, state.player2_board, state.current_player(), player)
-        self.eval_cache[state_key] = score
-        if len(self.eval_cache) > self.max_cache_size:
-            self.eval_cache.popitem(last=False)
+        
+        with self.cache_lock:
+            self.eval_cache[state_key] = score
+            # Fix: OrderedDict.popitem() syntax
+            if len(self.eval_cache) > self.max_cache_size:
+                self.eval_cache.popitem(last=False)  # Remove oldest item
 
     def _get_cached_eval(self, state, player):
+        """Thread-safe get cached evaluation"""
         state_key = (state.player1_board, state.player2_board, state.current_player(), player)
-        return self.eval_cache.get(state_key)
+        with self.cache_lock:
+            return self.eval_cache.get(state_key)

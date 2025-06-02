@@ -215,9 +215,6 @@ class MonteCarloDomain(MonteCarloBase):
             'total_moves_evaluated': 0
         }
         
-        # Add evaluation cache
-        self.eval_cache = {}
-        
     def get_move(self, time_limit=None):
         """Interface tương thích với base class"""
         return self.get_mcd_move(time_limit)
@@ -1207,24 +1204,3 @@ class MonteCarloDomain(MonteCarloBase):
         move_data.sort(key=lambda x: x[2], reverse=True)  # Sort by probability
         
         return move_data[:top_k]
-    
-    def get_performance_stats(self):
-        """Get performance statistics"""
-        stats = self.performance_stats.copy()
-        stats['eval_cache_size'] = len(self.eval_cache)
-        return stats
-    
-    def reset_performance_stats(self):
-        """Reset performance statistics"""
-        self.performance_stats = {
-            'tournaments_run': 0,
-            'parallel_evaluations': 0,
-            'avg_tournament_time': 0.0,
-            'total_moves_evaluated': 0
-        }
-        # Clear evaluation cache
-        self.eval_cache.clear()
-        
-    def clear_eval_cache(self):
-        """Clear evaluation cache manually"""
-        self.eval_cache.clear()

@@ -3,7 +3,7 @@ from app.ai.monte_carlo_domain import MonteCarloDomain
 from app.ai.alpha_beta_monte_carlo import AlphaBetaMonteCarlo
 from app.ai.minimax_player import MinimaxPlayer
 
-def get_monte_carlo_player(game, algo_type, number_simulations=300, s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, time_limit=None, switch_threshold=31, minimax_depth=4):
+def get_monte_carlo_player(game, algo_type, number_simulations=300, s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, time_limit=None, switch_threshold=13, minimax_depth=4):
     """Return a player based on the algorithm type."""
     if algo_type == "Minimax":
         return MinimaxPlayer(game, depth=minimax_depth, time_limit=time_limit)

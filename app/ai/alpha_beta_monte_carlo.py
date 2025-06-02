@@ -8,7 +8,7 @@ class AlphaBetaMonteCarlo:
     def __init__(self, state, **kwargs):
         self.state = state
         self.board = Board()
-        self.switch_threshold = kwargs.get('switch_threshold', 31)
+        self.switch_threshold = kwargs.get('switch_threshold', 13)
         self.minimax_depth = kwargs.get('minimax_depth', 4)
         self.time_limit = kwargs.get('time_limit', None)
         self.mcd = MonteCarloDomain(

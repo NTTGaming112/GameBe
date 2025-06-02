@@ -42,7 +42,7 @@ def setup_custom_board(layout_name="map1"):
     
     return game
 
-def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_threshold=31,
+def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_threshold=13,
                s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, time_limit=None):
     start_time = time.time()
     mc = get_monte_carlo_player(
@@ -67,7 +67,7 @@ def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_th
     return move, elapsed
 
 def run_full_game(algo1="Minimax", algo2="MCD", max_moves=None, 
-                  depth_minimax=4, num_simulations=300, switch_threshold=31, 
+                  depth_minimax=4, num_simulations=300, switch_threshold=13, 
                   s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, time_limit=None, verbose=True, layout=None):
     if layout:
         game = setup_custom_board(layout)
@@ -157,7 +157,7 @@ def run_full_game(algo1="Minimax", algo2="MCD", max_moves=None,
     }
 
 def run_multiple_games(num_games=5, algo1="Minimax", algo2="MCD", max_moves=None,
-                       depth_minimax=4, num_simulations=300, switch_threshold=31, 
+                       depth_minimax=4, num_simulations=300, switch_threshold=13, 
                        s1_ratio=1.0, s2_ratio=1.0, s3_ratio=0.5, time_limit=None, verbose=True,
                        layout=None):
     print(f"\n=== Running {num_games} games: {algo1} vs {algo2} ===")
@@ -265,7 +265,7 @@ if __name__ == "__main__":
                         help='Depth for minimax search')
     parser.add_argument('--simulations', type=int, default=300,
                         help='Number of simulations per move for Monte Carlo')
-    parser.add_argument('--threshold', type=int, default=31,
+    parser.add_argument('--threshold', type=int, default=13,
                         help='Switch threshold for AB+MCD')
     parser.add_argument('--s1-ratio', type=float, default=1.0,
                         help='Ratio for heuristic component weight')
