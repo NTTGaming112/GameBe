@@ -63,7 +63,7 @@ TOURNAMENT_CONFIG = {
     'ROUND1_SIM_RATIO': 1.0,  # Round 1: 100% of base_simulations
     'ROUND2_SIM_RATIO': 1.5,  # Round 2: 150% of base_simulations
     'ROUND3_SIM_RATIO': 2.0,  # Round 3: 200% of base_simulations
-    'PARALLEL_THRESHOLD': 6,
+    'PARALLEL_THRESHOLD': 3,
     'MAX_WORKERS': 4,
     'SIGMOID_FACTOR': 4.0
 }
@@ -83,8 +83,10 @@ COMPONENT_WEIGHTS = {
 }
 
 # Phase-adaptive Heuristic Formula Coefficients
-PHASE_ADAPTIVE_HEURISTIC_COEFFS = {
-    'early': {
+PHASE_ADAPTIVE_COEFFS = {
+    
+    'heuristic': {
+         'early': {
         's1': 1.0,  # Lower capture weight in early game (focus on expansion)
         's2': 1.2,  # Higher attack weight for territory control
         's3': 2.0,  # High clone bonus for expansion
@@ -102,6 +104,8 @@ PHASE_ADAPTIVE_HEURISTIC_COEFFS = {
         's3': 1.0,  # Lower clone bonus (efficiency over expansion)
         's4': 2.5   # Higher jump penalty (avoid risky moves)
     }
+      
+    },
 }
 
 # Phase-adaptive Clone Bonus and Jump Penalty

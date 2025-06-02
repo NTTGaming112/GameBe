@@ -59,7 +59,7 @@ def get_ai_move(game, algo_type, depth_minimax=4, num_simulations=300, switch_th
     if algo_type == "Minimax":
         move = mc.get_move(time_limit)
     elif algo_type in ["MCD", "AB+MCD"]:
-        move = mc.get_mcd_move(time_limit)
+        move = mc.get_mcts_move(time_limit)
     else:
         move = mc.get_move()
     elapsed = time.time() - start_time

@@ -23,9 +23,9 @@ class AlphaBetaMonteCarlo:
         )
 
     def get_play(self):
-        return self.get_mcd_move()
+        return self.get_mcts_move()
 
-    def get_mcd_move(self, time_limit=None):
+    def get_mcts_move(self, time_limit=None):
         # Use provided time_limit or fall back to instance time_limit
         effective_time_limit = time_limit if time_limit is not None else self.time_limit
         
@@ -33,7 +33,7 @@ class AlphaBetaMonteCarlo:
         empty_spaces = self.state.n_fields ** 2 - total_pieces
 
         if empty_spaces <= self.switch_threshold:
-            return self.mcd.get_mcd_move(effective_time_limit)
+            return self.mcd.get_mcts_move(effective_time_limit)
         else:
             state_minimax = StateMinimax(self.state.get_board_array(), self.state.current_player(), self.state.balls)
             return minimax(self.board, state_minimax, self.minimax_depth, effective_time_limit)

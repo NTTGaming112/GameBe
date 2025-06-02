@@ -5,8 +5,8 @@ from collections import OrderedDict
 import threading
 
 from .monte_carlo_node import MonteCarloNode
-from app.ai.constants import WIN_BONUS_EARLY, WIN_BONUS_FULL_BOARD, PLAYER_ONE, PLAYER_TWO
-from app.ai.ataxx_state import Ataxx
+from .constants import WIN_BONUS_EARLY, WIN_BONUS_FULL_BOARD, PLAYER_ONE, PLAYER_TWO
+from .ataxx_state import Ataxx
 
 class MonteCarloBase:
     def __init__(self, state, **kwargs):
@@ -19,10 +19,6 @@ class MonteCarloBase:
         self.max_cache_size = 1000
         self.cache_lock = threading.Lock()
 
-    def calculate_simulations(self, state):
-        total_pieces = state.balls[PLAYER_ONE] + state.balls[PLAYER_TWO]
-        return int(self.basic_simulations * (1 + 0.1 * total_pieces))
-
     def get_play(self):
         
         return self.get_move()
@@ -31,9 +27,9 @@ class MonteCarloBase:
         if time_limit is None:
             time_limit = self.time_limit
         start_time = time.time()
-        root = MonteCarloNode(self.root_state, mcd_instance=self if hasattr(self, '_calculate_structured_move_score') else None)
-        simulations = self.calculate_simulations(self.root_state)
-        batch_size = min(100, simulations // 4)
+
+        root = MonteCarloNode(self.root_state, mcd_instance=self)
+        simulations = self.basic_simulations
         simulation_count = 0
 
         def run_simulation():
@@ -47,12 +43,13 @@ class MonteCarloBase:
             node = root
             undo_stack = []
             
-            # Selection and expansion
+            # Selection
             while (not node.untried_moves or len(node.untried_moves) == 0) and node.children:
                 node = node.select_child()
                 if node.move:  # Only apply move if it's not None
                     undo_stack.append(state.apply_move_with_undo(node.move))
-                    
+
+            # Expansion
             if node.untried_moves and len(node.untried_moves) > 0:
                 expanded_node = node.expand()
                 if expanded_node is None:
@@ -63,33 +60,43 @@ class MonteCarloBase:
                 node = expanded_node
                 if node.move:  # Only apply move if it's not None
                     undo_stack.append(state.apply_move_with_undo(node.move))
-                    
-            result = self._simulate(state, state.current_player())
+
+            # Simulation       
+            result = self._simulate(state, self.root_state.turn_player)
             
             # Undo all moves
             for undo_info in reversed(undo_stack):
                 state.undo_move(undo_info)
-            return node, result
 
+            # Backpropagation
+            node.backpropagate(result)
+            
+            return True
+        
+        # Main simulation loop
         while simulation_count < simulations and (time_limit is None or time.time() - start_time < time_limit):
-            for _ in range(min(batch_size, simulations - simulation_count)):
-                node, result = run_simulation()
-                if node is None:
-                    continue
-                while node:
-                    node.update(result)
-                    node = node.parent
-                    result = 1 - result
+            if run_simulation():
                 simulation_count += 1
-                if time_limit and time.time() - start_time >= time_limit:
-                    break
-
+                
+            # Progress logging
+            if simulation_count % 100 == 0 and simulation_count > 0:
+                elapsed = time.time() - start_time
+                win_rate = root.ep / root.visits if root.visits > 0 else 0
+                print(f"  {simulation_count}/{simulations} sims, {elapsed:.1f}s, root_wr={win_rate:.3f}")
+                
+            if time_limit and time.time() - start_time >= time_limit:
+                break
+        
+        # Final move selection
         if not root.children:
             # If no children were expanded, try to get any valid move from current state
             valid_moves = self.root_state.get_all_possible_moves()
-            if valid_moves:
-                return random.choice(valid_moves)
-            return None
+            if not valid_moves:
+                # No valid moves, return None
+                return None
+            # If there are valid moves, return one randomly
+            return random.choice(valid_moves)
+        
         return max(root.children, key=lambda c: c.visits).move
 
     def _evaluate_final_position(self, state, player):
@@ -118,22 +125,19 @@ class MonteCarloBase:
     def _simulate(self, state, player):
         undo_stack = []
         simulation_depth = 0
-        max_simulation_depth = 20
+        max_simulation_depth = 50
         moves_buffer = []
-        consecutive_passes = 0
         
-        while not state.is_game_over() and simulation_depth < max_simulation_depth and consecutive_passes < 2:
+        while not state.is_game_over() and simulation_depth < max_simulation_depth:
             moves_buffer.clear()
             moves_buffer.extend(state.get_all_possible_moves())
             if not moves_buffer:
                 # No valid moves, pass turn
                 state.toggle_player()
-                consecutive_passes += 1
                 simulation_depth += 1
                 continue
-            
-            consecutive_passes = 0  # Reset pass counter when valid move is made
-            move = self._ultra_fast_move_selection(state, moves_buffer) if hasattr(self, '_ultra_fast_move_selection') and simulation_depth < 2 and len(moves_buffer) > 1 else random.choice(moves_buffer)
+
+            move = random.choice(moves_buffer)
             undo_stack.append(state.apply_move_with_undo(move))
             simulation_depth += 1
             
