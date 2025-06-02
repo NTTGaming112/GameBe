@@ -8,7 +8,7 @@ Hoàn toàn tích hợp tournament system với ba vòng thi đấu:
 3. Vòng chung kết: Head-to-head với parallel processing
 
 Hệ thống điểm số tổng hợp:
-- Heuristic Score (H): s1×C + s2×A + s3×B - s4×P
+- Heuristic Score (H): s1×A + s2×B + s3×C - s4×P
 - Tactical Score (T): Corner avoidance + No suicide + Max convert  
 - Strategic Score (S): Tempo + Enemy isolation + Mobility reduction
 - Simulation Score: Monte Carlo rollouts
@@ -20,9 +20,7 @@ import random
 import math
 import time
 from copy import deepcopy
-from collections import OrderedDict
-import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .monte_carlo_base import MonteCarloBase
 from app.ai.ataxx_state import Ataxx, PLAYER_ONE, PLAYER_TWO
@@ -249,88 +247,7 @@ class MonteCarloDomain(MonteCarloBase):
         self.performance_stats['total_moves_evaluated'] += len(moves)
         
         return best_move
-        
-    def get_probabilistic_move(self, temperature=1.0, use_tournament=True):
-        """
-        Get move using probabilistic selection with softmax and temperature
-        
-        Args:
-            temperature: Temperature for softmax (higher = more random)
-            use_tournament: Whether to use tournament system for scoring
-        
-        Returns:
-            Selected move based on probability distribution
-        """
-        state = self.root_state
-        
-        if state is None:
-            print("Error: root_state is None")
-            return None
-        
-        moves = state.get_all_possible_moves()
-        if not moves:
-            return None
-            
-        if len(moves) == 1:
-            return moves[0]
-        
-        # Get move scores
-        if use_tournament:
-            # Use simplified tournament scoring
-            scores = self._get_move_scores_tournament(state, moves)
-        else:
-            # Use basic heuristic scoring
-            scores = self._get_move_scores_basic(state, moves)
-        
-        # Apply softmax with temperature
-        probabilities = softmax_with_temperature(scores, temperature)
-        
-        # Sample move based on probabilities
-        selected_move = sample_from_probabilities(moves, probabilities)
-        
-        print(f"🎯 Probabilistic selection (T={temperature:.2f}):")
-        for i, (move, score, prob) in enumerate(zip(moves, scores, probabilities)):
-            marker = "👉" if move == selected_move else "  "
-            print(f"{marker} {move}: score={score:.3f}, prob={prob:.3f}")
-        
-        return selected_move
-    
-    def _get_move_scores_tournament(self, state, moves):
-        """Get move scores using simplified tournament system"""
-        phase = self._detect_game_phase(state)
-        weights = MCD_PHASE_WEIGHTS[phase]
-        
-        scores = []
-        for move in moves:
-            # Calculate all score components
-            heuristic_score = self._calculate_heuristic_score(state, move)
-            tactical_score = self._calculate_tactical_score(state, move)
-            strategic_score = self._calculate_strategic_score(state, move)
-            simulation_score = self._run_preliminary_simulation(state, move)
-            
-            # Combined score với phase weights
-            combined_score = (
-                weights['alpha'] * heuristic_score +
-                weights['beta'] * tactical_score +
-                weights['gamma'] * strategic_score +
-                weights['delta'] * simulation_score
-            )
-            
-            scores.append(combined_score)
-        
-        return scores
-    
-    def _get_move_scores_basic(self, state, moves):
-        """Get move scores using basic heuristic evaluation"""
-        scores = []
-        for move in moves:
-            heuristic_score = self._calculate_heuristic_score(state, move)
-            tactical_score = self._calculate_tactical_score(state, move)
-            combined_score = (heuristic_score + tactical_score) / 2
-            scores.append(combined_score)
-        
-        return scores
-    
+         
     def _execute_tournament_rounds(self, state, moves):
         """
         Execute complete tournament system
@@ -367,34 +284,23 @@ class MonteCarloDomain(MonteCarloBase):
         # =================== ROUND 1: PRELIMINARY ===================
         print(f"\n📊 ROUND 1: Preliminary Evaluation ({len(moves)} moves, {round1_sims} sims each)")
         
-        round1_results = []
-        for i, move in enumerate(moves):
-            # Calculate all score components
-            heuristic_score = self._calculate_heuristic_score(state, move)
-            tactical_score = self._calculate_tactical_score(state, move)
-            strategic_score = self._calculate_strategic_score(state, move)
-            simulation_score = self._run_preliminary_simulation(state, move)
-            
-            # Combined score với phase weights
-            combined_score = (
-                weights['alpha'] * heuristic_score +
-                weights['beta'] * tactical_score +
-                weights['gamma'] * strategic_score +
-                weights['delta'] * simulation_score
-            )
-            
-            round1_results.append((move, combined_score, heuristic_score, 
-                                 tactical_score, strategic_score, simulation_score))
-            
-            print(f"  Move {i+1:2d} {move}: H={heuristic_score:.2f} T={tactical_score:.2f} "
-                  f"S={strategic_score:.2f} Sim={simulation_score:.2f} → {combined_score:.3f}")
+        # Convert moves to candidate format for unified function
+        round1_candidates = [(move, 0.0, 0.0, 0.0, 0.0, 0.0) for move in moves]
+        
+        # Use unified function for Round 1
+        round1_results = self._execute_tournament_round(
+            state, round1_candidates, weights,
+            round_name="Round 1 (Preliminary)",
+            sim_ratio=TOURNAMENT_CONFIG['ROUND1_SIM_RATIO'],
+            is_first_round=True
+        )
         
         # Sort và advance top K1
         round1_results.sort(key=lambda x: x[1], reverse=True)
         round2_candidates = round1_results[:k1]
         
         print(f"\n✅ ROUND 1 COMPLETE - Top {k1} moves advance:")
-        for i, (move, score, h, t, s, sim) in enumerate(round2_candidates):
+        for i, (move, score, sim) in enumerate(round2_candidates):
             print(f"  {i+1}. {move}: {score:.3f}")
             
         if k1 == 1:
@@ -402,27 +308,15 @@ class MonteCarloDomain(MonteCarloBase):
             print(f"\n🥇 SINGLE WINNER: {winner}")
             return winner
         
-        # =================== ROUND 2: SIMULATION ===================
-        print(f"\n🎯 ROUND 2: Intensive Simulation ({k1} moves, {round2_sims} sims each)")
+        # =================== ROUND 2: COMBINED SCORING ===================
+        print(f"\n🎯 ROUND 2: Combined Scoring & Simulation ({k1} moves, {round2_sims} sims each)")
         
-        round2_results = []
-        for move, prev_score, h, t, s, prev_sim in round2_candidates:
-            # More intensive simulation
-            intensive_sim = self._run_intensive_simulation(state, move)
-            
-            # Combine simulation scores
-            combined_sim = (prev_sim + intensive_sim) / 2
-            
-            # Recalculate final score
-            final_score = (
-                weights['alpha'] * h +
-                weights['beta'] * t +
-                weights['gamma'] * s +
-                weights['delta'] * combined_sim
-            )
-            
-            round2_results.append((move, final_score, combined_sim))
-            print(f"  {move}: intensive_sim={intensive_sim:.3f} → final={final_score:.3f}")
+        # Use unified function for Round 2
+        round2_results = self._execute_tournament_round(
+            state, round2_candidates, weights, 
+            round_name="Round 2", 
+            sim_ratio=TOURNAMENT_CONFIG['ROUND2_SIM_RATIO']
+        )
         
         # Sort và advance top K2
         round2_results.sort(key=lambda x: x[1], reverse=True)
@@ -440,14 +334,12 @@ class MonteCarloDomain(MonteCarloBase):
         # =================== ROUND 3: FINAL ===================
         print(f"\n🏁 ROUND 3: Final Elimination ({k2} moves, {round3_sims} sims each)")
         
-        # Decide parallel vs sequential
-        use_parallel = (len(round3_candidates) >= TOURNAMENT_CONFIG['PARALLEL_THRESHOLD'] 
-                       and self.use_parallel)
-        
-        if use_parallel:
-            final_scores = self._parallel_final_round(state, round3_candidates, weights)
-        else:
-            final_scores = self._sequential_final_round(state, round3_candidates, weights)
+        # Use unified function for Round 3
+        final_scores = self._execute_tournament_round(
+            state, round3_candidates, weights,
+            round_name="Round 3 (Final)",
+            sim_ratio=TOURNAMENT_CONFIG['ROUND3_SIM_RATIO']
+        )
         
         # Determine tournament winner
         winner_move = max(final_scores, key=lambda x: x[1])[0]
@@ -458,65 +350,44 @@ class MonteCarloDomain(MonteCarloBase):
     
     def _calculate_heuristic_score(self, state, move):
         """
-        Heuristic Score: H = s1×C + s2×A + s3×B - s4×P
+        Heuristic Score: H = s1×A + s2×B + s3×C - s4×P
         
-        C = Clone moves (1-step moves)
         A = Attack moves (capture enemy pieces)
-        B = Clone bonus (reward clone/adjacent moves)
+        B = Friendly neighbors (adjacent friendly pieces)
+        C = Clone bonus (reward for adjacent moves)
         P = Jump penalty (penalize long jumps)
-        """
-        # Debug: kiểm tra cấu trúc move
-        if move is None:
-            return 0.0
-        
-        # Kiểm tra xem move có phải là tuple không
-        if not isinstance(move, (tuple, list)) or len(move) != 2:
-            print(f"Warning: Invalid move format: {move}, type: {type(move)}")
-            return 0.0
-            
+        """ 
         from_pos, to_pos = move
-        
-        # Kiểm tra positions có hợp lệ không
-        if to_pos is None:
-            print(f"Warning: to_pos is None in move: {move}")
-            return 0.0
-            
-        # Special handling for clone moves (from_pos is None)
-        if from_pos is None:
-            # This is a clone move, distance is 0
-            distance = 0
-        else:
-            distance = self._manhattan_distance(from_pos, to_pos)
 
-        
-        # C: Clone component
         # Special handling for clone moves (from_pos is None)
         if from_pos is None:
             # This is a clone move, distance is 0
             distance = 0
         else:
             distance = self._manhattan_distance(from_pos, to_pos)
-        C = 1.0 if distance <= 1 else 0.0
         
-        # A: Attack component (captured pieces)
+        # C: Attack component (captured pieces)
         temp_state = deepcopy(state)
         original_enemy = self._count_enemy_pieces(temp_state, state.turn_player)
         temp_state.move_with_position(move)
         new_enemy = self._count_enemy_pieces(temp_state, state.turn_player)
         A = original_enemy - new_enemy
         
-        # B: Clone bonus (reward clone moves)
-        phase = self._detect_game_phase(state)
-        B = self._calculate_clone_bonus(from_pos, to_pos, phase)
+        # B: Friendly neighbors component
+        B = self._count_friendly_neighbors(state, to_pos, state.turn_player)
         
+        # C: Clone bonus (reward for adjacent moves)
+        C = 1.0 if distance <= 1 else 0.0
+
         # P: Jump penalty (penalize long jumps)
-        P = self._calculate_jump_penalty(from_pos, to_pos, phase)
+        P = 1.0 if distance > 1 else 0
         
         # Apply heuristic formula
+        phase = self._detect_game_phase(state)
         heuristic_coeffs = PHASE_ADAPTIVE_HEURISTIC_COEFFS[phase]
-        h_raw = (heuristic_coeffs['s1'] * C + 
-                heuristic_coeffs['s2'] * A + 
-                heuristic_coeffs['s3'] * B - 
+        h_raw = (heuristic_coeffs['s1'] * A + 
+                heuristic_coeffs['s2'] * B + 
+                heuristic_coeffs['s3'] * C - 
                 heuristic_coeffs['s4'] * P)
 
         # Sigmoid normalization
@@ -550,9 +421,9 @@ class MonteCarloDomain(MonteCarloBase):
         # 5. Mobility preservation
         mobility_preserved = self._check_mobility_preservation(state, move)
         tactical_score += mobility_preserved * 0.1
-        
-        return max(0.0, min(1.0, tactical_score))
-    
+
+        return self._sigmoid_normalize(tactical_score)
+
     def _calculate_strategic_score(self, state, move):
         """
         Strategic Score: Tempo control + Enemy isolation + Mobility reduction
@@ -570,48 +441,40 @@ class MonteCarloDomain(MonteCarloBase):
         # 3. Mobility reduction (0-0.3)
         mobility_reduction = self._evaluate_mobility_reduction(state, move)
         strategic_score += mobility_reduction * 0.3
-        
-        return max(0.0, min(1.0, strategic_score))
+
+        return self._sigmoid_normalize(strategic_score)
     
-    def _run_preliminary_simulation(self, state, move):
-        """Quick simulation cho Round 1"""
-        num_sims = int(self.basic_simulations * TOURNAMENT_CONFIG['ROUND1_SIM_RATIO'])
-        total_score = 0.0
-        original_player = state.turn_player
+    def _execute_tournament_round(self, state, candidates, weights, round_name="Round", sim_ratio=1.5, is_first_round=False):
+        """
+        Unified function for executing tournament rounds with combined scoring and parallel processing
         
-        for _ in range(num_sims):
-            temp_state = deepcopy(state)
-            temp_state.move_with_position(move)
-            temp_state.toggle_player()
+        Args:
+            state: Current game state
+            candidates: List of candidate moves with their data
+            weights: Phase-adaptive component weights (alpha, beta, gamma, delta)
+            round_name: Name of the round for logging
+            sim_ratio: Simulation ratio multiplier
+            is_first_round: True if this is Round 1 (preliminary evaluation)
             
-            score = _rollout_simulation(temp_state, original_player)
-            total_score += score
-            
-        return total_score / num_sims
-    
-    def _run_intensive_simulation(self, state, move):
-        """Intensive simulation cho Round 2"""
-        num_sims = int(self.basic_simulations * TOURNAMENT_CONFIG['ROUND2_SIM_RATIO'])
-        total_score = 0.0
-        original_player = state.turn_player
+        Returns:
+            List of (move, combined_score, simulation_score) tuples
+        """
+        num_candidates = len(candidates)
         
-        for _ in range(num_sims):
-            temp_state = deepcopy(state)
-            temp_state.move_with_position(move)
-            temp_state.toggle_player()
-            
-            # Longer, smarter rollout
-            score = self._smart_rollout(temp_state, original_player)
-            total_score += score
-            
-        return total_score / num_sims
+        # Decide parallel vs sequential processing
+        use_parallel = (num_candidates >= TOURNAMENT_CONFIG['PARALLEL_THRESHOLD'] and self.use_parallel)
+        
+        if use_parallel:
+            return self._parallel_tournament_round(state, candidates, weights, round_name, sim_ratio, is_first_round)
+        else:
+            return self._sequential_tournament_round(state, candidates, weights, round_name, sim_ratio, is_first_round)
     
-    def _parallel_final_round(self, state, candidates, weights):
-        """Parallel processing cho Round 3 with combined scoring"""
-        print("  🔄 Using PARALLEL processing for final round")
+    def _parallel_tournament_round(self, state, candidates, weights, round_name, sim_ratio, is_first_round=False):
+        """Parallel processing for tournament rounds with combined scoring"""
+        print(f"  🔄 Using PARALLEL processing for {round_name}")
         self.performance_stats['parallel_evaluations'] += 1
         
-        # Prepare state data
+        # Prepare state data for worker processes
         state_data = {
             'player1_board': state.player1_board,
             'player2_board': state.player2_board,
@@ -619,98 +482,133 @@ class MonteCarloDomain(MonteCarloBase):
             'turn_player': state.turn_player
         }
         
-        # Prepare arguments
-        num_sims = int(self.basic_simulations * TOURNAMENT_CONFIG['ROUND3_SIM_RATIO'])
-        args_list = [(state_data, move, num_sims, state.turn_player) 
-                    for move, _, _ in candidates]
+        # Calculate simulation count for this round
+        num_sims = int(self.basic_simulations * sim_ratio)
         
-        final_scores = []
+        # Prepare arguments - handle different candidate formats
+        if is_first_round:  # Round 1: candidates are (move, 0.0, 0.0, 0.0, 0.0, 0.0) 
+            args_list = [(state_data, move, num_sims, state.turn_player) 
+                        for move, _, _, _, _, _ in candidates]
+        elif len(candidates[0]) == 6:  # Round 2 format: (move, prev_score, h, t, s, prev_sim)
+            args_list = [(state_data, move, num_sims, state.turn_player) 
+                        for move, _, _, _, _, _ in candidates]
+        else:  # Round 3 format: (move, combined_score, sim_score)
+            args_list = [(state_data, move, num_sims, state.turn_player) 
+                        for move, _, _ in candidates]
+        
+        results = []
         
         try:
             with ThreadPoolExecutor(max_workers=TOURNAMENT_CONFIG['MAX_WORKERS']) as executor:
+                # Submit all simulation tasks
                 future_to_move = {
-                    executor.submit(_parallel_simulation_worker, args): (candidates[i][0], candidates[i][2])
+                    executor.submit(_parallel_simulation_worker, args): candidates[i]
                     for i, args in enumerate(args_list)
                 }
                 
+                # Collect results as they complete
                 for future in as_completed(future_to_move):
-                    move, prev_sim_score = future_to_move[future]
+                    candidate_data = future_to_move[future]
+                    
                     try:
-                        final_sim_score = future.result()
+                        new_sim_score = future.result()
                         
-                        # Recalculate all components for final scoring
+                        # Extract move and previous simulation score
+                        if is_first_round:  # Round 1 format
+                            move, _, _, _, _, prev_sim = candidate_data
+                        elif len(candidate_data) == 6:  # Round 2 format
+                            move, prev_combined_score, prev_h, prev_t, prev_s, prev_sim = candidate_data
+                        else:  # Round 3 format
+                            move, prev_combined_score, prev_sim = candidate_data
+                        
+                        # Recalculate all components for fresh scoring
                         h = self._calculate_heuristic_score(state, move)
                         t = self._calculate_tactical_score(state, move)
                         s = self._calculate_strategic_score(state, move)
                         
-                        # Average previous and final simulation scores
-                        combined_sim = (prev_sim_score + final_sim_score) / 2
+                        # Handle simulation score combination
+                        if is_first_round:
+                            # For Round 1, just use the new simulation score
+                            combined_sim = new_sim_score
+                        else:
+                            # Combine simulation scores (average of previous and new)
+                            combined_sim = (prev_sim + new_sim_score) / 2
                         
-                        # Calculate final combined score
-                        final_combined_score = (
+                        # Calculate final combined score with phase weights
+                        combined_score = (
                             weights['alpha'] * h +
                             weights['beta'] * t +
                             weights['gamma'] * s +
                             weights['delta'] * combined_sim
                         )
                         
-                        final_scores.append((move, final_combined_score))
-                        print(f"    ✓ {move}: H={h:.2f} T={t:.2f} S={s:.2f} Sim={combined_sim:.3f} → {final_combined_score:.3f}")
+                        results.append((move, combined_score, combined_sim))
+                        print(f"    ✓ {move}: H={h:.2f} T={t:.2f} S={s:.2f} Sim={combined_sim:.3f} → {combined_score:.3f}")
+                        
                     except Exception as e:
-                        print(f"    ⚠ {move}: parallel error, using fallback")
-                        final_scores.append((move, 0.5))
+                        print(f"    ⚠ {candidate_data[0]}: parallel error, using fallback")
+                        # Fallback to previous score
+                        if is_first_round:
+                            # For Round 1, use basic heuristic as fallback
+                            move = candidate_data[0]
+                            h = self._calculate_heuristic_score(state, move)
+                            results.append((move, h, 0.0))
+                        elif len(candidate_data) == 6:
+                            results.append((candidate_data[0], candidate_data[1], candidate_data[5]))
+                        else:
+                            results.append((candidate_data[0], candidate_data[1], candidate_data[2]))
                         
         except Exception as e:
             print(f"  ⚠️ Parallel processing failed, falling back to sequential")
-            return self._sequential_final_round(state, candidates, weights)
+            return self._sequential_tournament_round(state, candidates, weights, round_name, sim_ratio, is_first_round)
         
-        return final_scores
+        return results
     
-    def _sequential_final_round(self, state, candidates, weights):
-        """Sequential processing cho Round 3 with combined scoring"""
-        print("  🔄 Using SEQUENTIAL processing for final round")
-        final_scores = []
+    def _sequential_tournament_round(self, state, candidates, weights, round_name, sim_ratio, is_first_round=False):
+        """Sequential processing for tournament rounds with combined scoring"""
+        print(f"  🔄 Using SEQUENTIAL processing for {round_name}")
         
-        for move, prev_combined_score, prev_sim_score in candidates:
-            # Get final intensive simulation
-            final_sim_score = self._run_final_simulation(state, move)
+        # Calculate simulation count for this round
+        num_sims = int(self.basic_simulations * sim_ratio)
+        results = []
+        
+        for candidate_data in candidates:
+            # Extract move and previous simulation score
+            if is_first_round:  # Round 1 format
+                move, _, _, _, _, prev_sim = candidate_data
+            elif len(candidate_data) == 6:  # Round 2 format
+                move, prev_combined_score, prev_h, prev_t, prev_s, prev_sim = candidate_data
+            else:  # Round 3 format
+                move, prev_combined_score, prev_sim = candidate_data
             
-            # Recalculate all components for final scoring
+            # Run intensive simulation for this round
+            new_sim_score = _rollout_simulation(state, move, num_sims)
+
+            # Recalculate all components for fresh scoring
             h = self._calculate_heuristic_score(state, move)
-            t = self._calculate_tactical_score(state, move) 
+            t = self._calculate_tactical_score(state, move)
             s = self._calculate_strategic_score(state, move)
             
-            # Average previous and final simulation scores
-            combined_sim = (prev_sim_score + final_sim_score) / 2
+            # Handle simulation score combination
+            if is_first_round:
+                # For Round 1, just use the new simulation score
+                combined_sim = new_sim_score
+            else:
+                # Combine simulation scores (average of previous and new)
+                combined_sim = (prev_sim + new_sim_score) / 2
             
-            # Calculate final combined score
-            final_combined_score = (
+            # Calculate final combined score with phase weights
+            combined_score = (
                 weights['alpha'] * h +
                 weights['beta'] * t +
                 weights['gamma'] * s +
                 weights['delta'] * combined_sim
             )
             
-            final_scores.append((move, final_combined_score))
-            print(f"    ✓ {move}: H={h:.2f} T={t:.2f} S={s:.2f} Sim={combined_sim:.3f} → {final_combined_score:.3f}")
+            results.append((move, combined_score, combined_sim))
+            print(f"    ✓ {move}: H={h:.2f} T={t:.2f} S={s:.2f} Sim={combined_sim:.3f} → {combined_score:.3f}")
             
-        return final_scores
-    
-    def _run_final_simulation(self, state, move):
-        """Final intensive simulation"""
-        num_sims = int(self.basic_simulations * TOURNAMENT_CONFIG['ROUND3_SIM_RATIO'])
-        total_score = 0.0
-        original_player = state.turn_player
-        
-        for _ in range(num_sims):
-            temp_state = deepcopy(state)
-            temp_state.move_with_position(move)
-            temp_state.toggle_player()
-            
-            score = self._smart_rollout(temp_state, original_player)
-            total_score += score
-            
-        return total_score / num_sims
+        return results
     
     # ========================= HELPER METHODS =========================
     
@@ -753,11 +651,21 @@ class MonteCarloDomain(MonteCarloBase):
             return bin(state.player2_board).count('1')
         else:
             return bin(state.player1_board).count('1')
-    
-    def _calculate_blocking_value(self, state, position):
-        """Calculate blocking value for position"""
-        # Simplified: check if position blocks enemy expansion paths
-        blocking_value = 0.0
+        
+    def _count_friendly_neighbors(self, state, position, player):
+        """
+        Đếm số quân đồng minh xung quanh ô đích
+        
+        Args:
+            state: Current game state
+            position: Target position (row, col) hoặc int
+            player: Current player (PLAYER_ONE hoặc PLAYER_TWO)
+        
+        Returns:
+            Number of friendly pieces (0-8) around the target position
+        """
+        if position is None:
+            return 0
         
         # Handle both tuple (row, col) and integer formats
         if isinstance(position, tuple):
@@ -765,63 +673,65 @@ class MonteCarloDomain(MonteCarloBase):
         else:
             row, col = divmod(position, 7)
         
-        # Check adjacent positions for enemy pieces
-        for dr, dc in ADJACENT_POSITIONS:
-            new_row, new_col = row + dr, col + dc
-            if 0 <= new_row < 7 and 0 <= new_col < 7:
-                new_pos = new_row * 7 + new_col
-                if state.turn_player == PLAYER_ONE:
-                    if (state.player2_board >> new_pos) & 1:
-                        blocking_value += 0.2
-                else:
-                    if (state.player1_board >> new_pos) & 1:
-                        blocking_value += 0.2
+        friendly_count = 0
         
-        return min(blocking_value, 1.0)
+        # Check all 8 adjacent positions (including diagonals)
+        for dr in [-1, 0, 1]:
+            for dc in [-1, 0, 1]:
+                if dr == 0 and dc == 0:
+                    continue  # Skip the center position itself
+                    
+                new_row, new_col = row + dr, col + dc
+                
+                # Check if position is within board bounds
+                if 0 <= new_row < 7 and 0 <= new_col < 7:
+                    new_bit = new_row * 7 + new_col
+                    
+                    # Check if there's a friendly piece at this position
+                    if player == PLAYER_ONE:
+                        if (state.player1_board >> new_bit) & 1:
+                            friendly_count += 1
+                    else:  # PLAYER_TWO
+                        if (state.player2_board >> new_bit) & 1:
+                            friendly_count += 1
+        
+        return friendly_count
     
-    def _calculate_position_penalty(self, position):
-        """Calculate position penalty"""
-        penalty = 0.0
+    # def _calculate_blocking_value(self, state, position):
+    #     """Calculate blocking value for position"""
+    #     # Simplified: check if position blocks enemy expansion paths
+    #     blocking_value = 0.0
         
-        if self._is_corner_position(position):
-            penalty += 0.8
-        elif self._is_edge_position(position):
-            penalty += 0.3
+    #     # Handle both tuple (row, col) and integer formats
+    #     if isinstance(position, tuple):
+    #         row, col = position
+    #     else:
+    #         row, col = divmod(position, 7)
+        
+    #     # Check adjacent positions for enemy pieces
+    #     for dr, dc in ADJACENT_POSITIONS:
+    #         new_row, new_col = row + dr, col + dc
+    #         if 0 <= new_row < 7 and 0 <= new_col < 7:
+    #             new_pos = new_row * 7 + new_col
+    #             if state.turn_player == PLAYER_ONE:
+    #                 if (state.player2_board >> new_pos) & 1:
+    #                     blocking_value += 0.2
+    #             else:
+    #                 if (state.player1_board >> new_pos) & 1:
+    #                     blocking_value += 0.2
+        
+    #     return min(blocking_value, 1.0)
+    
+    # def _calculate_position_penalty(self, position):
+    #     """Calculate position penalty"""
+    #     penalty = 0.0
+        
+    #     if self._is_corner_position(position):
+    #         penalty += 0.8
+    #     elif self._is_edge_position(position):
+    #         penalty += 0.3
             
-        return penalty
-    
-    def _calculate_clone_bonus(self, from_pos, to_pos, phase):
-        """Calculate phase-adaptive clone bonus"""
-        phase_config = PHASE_BONUS_PENALTY[phase]
-        
-        # Clone moves (from_pos is None) get full bonus
-        if from_pos is None:
-            return phase_config['clone_bonus']
-        
-        # Adjacent moves (distance 1) get partial bonus
-        distance = self._manhattan_distance(from_pos, to_pos)
-        if distance <= 1:
-            return phase_config['clone_bonus'] * 0.7
-        
-        # Jump moves get no clone bonus
-        return 0.0
-    
-    def _calculate_jump_penalty(self, from_pos, to_pos, phase):
-        """Calculate phase-adaptive jump penalty"""
-        phase_config = PHASE_BONUS_PENALTY[phase]
-        
-        # Clone moves (from_pos is None) have no jump penalty
-        if from_pos is None:
-            return 0.0
-        
-        # Calculate distance and apply penalty
-        distance = self._manhattan_distance(from_pos, to_pos)
-        if distance <= 1:
-            return 0.0  # No penalty for adjacent moves
-        else:
-            # Jump moves get penalty based on distance and phase
-            penalty_factor = min(distance / 2.0, 1.0)  # Scale by distance
-            return phase_config['jump_penalty'] * penalty_factor
+    #     return penalty
 
     def _is_corner_position(self, position):
         """Check if position is corner"""
@@ -1076,131 +986,3 @@ class MonteCarloDomain(MonteCarloBase):
         if enemy_moves_before == 0:
             return 1.0
         return (enemy_moves_before - enemy_moves_after) / enemy_moves_before
-    
-    def _smart_rollout(self, state, original_player):
-        """Smarter rollout với heuristic guidance and enhanced evaluation"""
-        simulation_state = deepcopy(state)
-        depth = 0
-        max_depth = 25
-        
-        while depth < max_depth and not simulation_state.is_game_over():
-            moves = simulation_state.get_all_possible_moves()
-            if not moves:
-                simulation_state.toggle_player()
-                moves = simulation_state.get_all_possible_moves()
-                if not moves:
-                    break
-            
-            # Use heuristic guidance for move selection
-            if len(moves) > 3:
-                move_scores = []
-                for move in moves:
-                    score = self._quick_move_heuristic(simulation_state, move)
-                    move_scores.append((move, score))
-                
-                move_scores.sort(key=lambda x: x[1], reverse=True)
-                # Select từ top 3 moves
-                top_moves = [move for move, _ in move_scores[:3]]
-                selected_move = random.choice(top_moves)
-            else:
-                selected_move = random.choice(moves)
-            
-            simulation_state.move_with_position(selected_move)
-            simulation_state.toggle_player()
-            depth += 1
-        
-        # Use enhanced final position evaluation
-        return self._evaluate_final_position(simulation_state, original_player)
-    
-    def _quick_move_heuristic(self, state, move):
-        """Quick heuristic cho smart rollout"""
-        from_pos, to_pos = move
-        score = 0.5
-        
-        # Prefer center
-        if self._is_center_position(to_pos):
-            score += 0.3
-        
-        # Prefer captures
-        captures = self._count_captures(state, move)
-        score += captures * 0.2
-        
-        # Avoid corners
-        if self._is_corner_position(to_pos):
-            score -= 0.4
-        
-        return score
-    
-    def analyze_temperature_effects(self, temperatures=[0.1, 0.5, 1.0, 2.0, 5.0]):
-        """
-        Analyze the effects of different temperature values on move selection
-        
-        Args:
-            temperatures: List of temperature values to test
-        """
-        state = self.root_state
-        if state is None:
-            return
-            
-        moves = state.get_all_possible_moves()
-        if not moves:
-            return
-            
-        print(f"\n🌡️  Temperature Analysis for {len(moves)} moves:")
-        
-        # Get base scores
-        scores = self._get_move_scores_basic(state, moves)
-        
-        print("\nMove Scores:")
-        for i, (move, score) in enumerate(zip(moves, scores)):
-            print(f"  {i+1}. {move}: {score:.3f}")
-        
-        print("\nProbability Distributions by Temperature:")
-        for temp in temperatures:
-            probabilities = softmax_with_temperature(scores, temp)
-            print(f"\nTemperature = {temp}:")
-            
-            # Show probabilities
-            for i, (move, prob) in enumerate(zip(moves, probabilities)):
-                bar_length = int(prob * 20)  # Scale for visualization
-                bar = "█" * bar_length + "░" * (20 - bar_length)
-                print(f"  {move}: {prob:.3f} |{bar}|")
-            
-            # Calculate entropy (measure of randomness)
-            entropy = -sum(p * math.log(p) if p > 0 else 0 for p in probabilities)
-            max_entropy = math.log(len(moves))
-            normalized_entropy = entropy / max_entropy if max_entropy > 0 else 0
-            print(f"  Entropy: {entropy:.2f} (normalized: {normalized_entropy:.2f})")
-            
-            # Most likely move
-            max_prob_idx = max(range(len(probabilities)), key=lambda i: probabilities[i])
-            print(f"  Most likely: {moves[max_prob_idx]} ({probabilities[max_prob_idx]:.3f})")
-    
-    def get_top_moves_with_probabilities(self, top_k=5, temperature=1.0):
-        """
-        Get top K moves with their probabilities
-        
-        Args:
-            top_k: Number of top moves to return
-            temperature: Temperature for softmax
-            
-        Returns:
-            List of (move, score, probability) tuples
-        """
-        state = self.root_state
-        if state is None:
-            return []
-            
-        moves = state.get_all_possible_moves()
-        if not moves:
-            return []
-        
-        # Get scores and probabilities
-        scores = self._get_move_scores_basic(state, moves)
-        probabilities = softmax_with_temperature(scores, temperature)
-        
-        # Combine and sort by probability
-        move_data = list(zip(moves, scores, probabilities))
-        move_data.sort(key=lambda x: x[2], reverse=True)  # Sort by probability
-        
-        return move_data[:top_k]
