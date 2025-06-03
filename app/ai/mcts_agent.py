@@ -28,7 +28,7 @@ class MCTSNode:
         return child
 
 class MCTSAgent:
-    def __init__(self, iterations=1000):
+    def __init__(self, iterations=300):
         self.iterations = iterations
 
     def get_move(self, state):
