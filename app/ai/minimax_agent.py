@@ -1,5 +1,4 @@
 import time
-import numpy as np
 from heuristics import evaluate
 
 class MinimaxAgent:

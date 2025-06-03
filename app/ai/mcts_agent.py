@@ -1,6 +1,5 @@
 import random
 import math
-from ataxx_state import AtaxxState
 from heuristics import evaluate
 
 # Constants

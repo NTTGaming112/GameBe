@@ -1,5 +1,5 @@
 import numpy as np
-from ataxx_state import AtaxxState, BOARD_SIZE
+from ataxx_state import BOARD_SIZE
 
 # Heuristic coefficients
 S1, S2, S3, S4 = 10, 5, 2, 3

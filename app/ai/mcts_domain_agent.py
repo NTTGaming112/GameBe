@@ -1,5 +1,4 @@
 import numpy as np
-from ataxx_state import AtaxxState
 from heuristics import evaluate, heuristic
 
 class MCTSNode:
