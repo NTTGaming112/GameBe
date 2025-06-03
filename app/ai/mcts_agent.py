@@ -27,10 +27,6 @@ class MCTSNode:
         self.children.append(child)
         return child
 
-    def update(self, result):
-        self.visits += 1
-        self.value += result
-
 class MCTSAgent:
     def __init__(self, iterations=1000):
         self.iterations = iterations
@@ -54,7 +50,11 @@ class MCTSAgent:
                 sim_state.make_move(random.choice(moves))
             result = evaluate(sim_state, state.current_player)
             # Backpropagation
-            while node is not None:
-                node.update(result)
+            while node:
+                node.visits += 1
+                # score là từ góc nhìn của player tại nút gốc
+                # Đổi dấu nếu là đối thủ
+                node.value += result if node.state.current_player == state.current_player else 1 - result
                 node = node.parent
+
         return max(root.children, key=lambda c: c.visits).move if root.children else None

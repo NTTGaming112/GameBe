@@ -4,7 +4,7 @@ from heuristics import evaluate
 from minimax_agent import MinimaxAgent
 
 class ABMCTSDomainAgent:
-    def __init__(self, iterations=500, ab_depth=3):
+    def __init__(self, iterations=500, ab_depth=4):
         self.iterations = iterations
         self.ab_depth = ab_depth
         self.minimax = MinimaxAgent(max_depth=ab_depth)
@@ -85,8 +85,8 @@ class ABMCTSDomainAgent:
         return best_move
 
     def get_move(self, state):
-        empty_cells = np.sum(state.board == 0)
-        n_star = 40  # Switch to MCTS when ≤40 empty cells
+        empty_cells = state.get_empty_cells()
+        n_star = 13  # Switch to MCTS when ≤13 empty cells
         if empty_cells > n_star:
             return self.minimax.get_move(state)
         return self.tournament_mcts(state)

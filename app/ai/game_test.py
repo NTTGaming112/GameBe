@@ -24,7 +24,7 @@ async def run_game_test():
         print(f"\nMatch: {agent1_name} (X) vs {agent2_name} (O)")
         for game_num in range(5):
             print(f"\nGame {game_num + 1} (Forward)")
-            initial_board = get_initial_map(0)
+            initial_board = get_initial_map(2)
             map_index = np.where(np.array([np.array_equal(initial_board, m) for m in INITIAL_MAPS]))[0][0]
             state = AtaxxState(initial_board=initial_board)
             print(f"Initial map #{map_index + 1} (MAP{map_index + 1})")
@@ -69,7 +69,7 @@ async def run_game_test():
         print(f"\nMatch: {agent2_name} (X) vs {agent1_name} (O)")
         for game_num in range(5):
             print(f"\nGame {game_num + 1} (Reverse)")
-            initial_board = get_initial_map(0)
+            initial_board = get_initial_map(2)
             map_index = np.where(np.array([np.array_equal(initial_board, m) for m in INITIAL_MAPS]))[0][0]
             state = AtaxxState(initial_board=initial_board)
             print(f"Initial map #{map_index + 1} (MAP{map_index + 1})")
