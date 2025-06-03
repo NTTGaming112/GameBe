@@ -14,3 +14,6 @@ EMPTY = 0
 PLAYER_1 = 1
 PLAYER_2 = -1
 BLOCKED = -2  # For future use if blocked cells are added
+
+# Default map index for testing
+MAP = 1

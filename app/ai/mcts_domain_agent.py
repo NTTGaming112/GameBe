@@ -2,6 +2,15 @@ import numpy as np
 from heuristics import evaluate, heuristic
 from constants import DEFAULT_MCTS_DOMAIN_ITERATIONS
 
+def sigmoid(x, scale=1.0):
+    """Sigmoid function to normalize values to [0,1]"""
+    return 1.0 / (1.0 + np.exp(-x / scale))
+
+def inverse_sigmoid(y):
+    """Inverse sigmoid for debugging purposes"""
+    y = np.clip(y, 1e-7, 1-1e-7)  # Avoid log(0)
+    return np.log(y / (1 - y))
+
 class MCTSNode:
     def __init__(self, state, parent=None, move=None):
         self.state = state
@@ -9,9 +18,19 @@ class MCTSNode:
         self.move = move
         self.children = []
         self.visits = 0
-        self.value = 0
-        self.untried_moves = state.get_legal_moves()
-        self.heuristic_score = 0
+        self.value = 0.0
+        self.untried_moves = list(state.get_legal_moves())
+        self.heuristic_score = 0.5  # Default to neutral [0,1]
+        self._state_hash = self._compute_state_hash()
+    
+    def _compute_state_hash(self):
+        """Tính hash cho state để so sánh nhanh"""
+        return hash((self.state.board.tobytes(), self.state.current_player))
+    
+    def state_equals(self, other_state):
+        """So sánh state với state khác"""
+        return (self.state.current_player == other_state.current_player and 
+                np.array_equal(self.state.board, other_state.board))
 
 class MCTSDomainAgent:
     def __init__(self, iterations=DEFAULT_MCTS_DOMAIN_ITERATIONS, tournament_params=None):
@@ -19,6 +38,10 @@ class MCTSDomainAgent:
         self.c = 1.41
         self.pb_c = 0.1
         self.domain_knowledge = evaluate
+        
+        # Sigmoid parameters - chỉ cần 2 loại
+        self.heuristic_scale = 5.0    # Scale for heuristic values
+        self.evaluation_scale = 2.0   # Scale for evaluation scores (optional smoothing)
         
         self.tournament_params = tournament_params or {
             'round1': {'simulations': iterations, 'keep_top': 5},
@@ -28,13 +51,23 @@ class MCTSDomainAgent:
         
         self.heavy_playout_threshold = 0.7
         self.heavy_playout_depth = 10
+        
+        # Tree reuse components
+        self.root = None
+        self.previous_states = []
+        self.max_tree_depth = 50
 
     def ucb1(self, node, parent_visits):
         if node.visits == 0:
             return float('inf')
         
+        # Progressive bias với sigmoid-normalized heuristic
         pb_bonus = self.pb_c * node.heuristic_score / (node.visits + 1)
+        
+        # Exploitation: average win rate (already in [0,1])
         exploitation = node.value / node.visits
+        
+        # Exploration
         exploration = self.c * np.sqrt(np.log(parent_visits) / node.visits)
         
         return exploitation + exploration + pb_bonus
@@ -52,17 +85,65 @@ class MCTSDomainAgent:
             child = MCTSNode(new_state, parent=node, move=move)
             
             try:
-                child.heuristic_score = heuristic(child.state, move, node.state.current_player)
+                # Normalize heuristic score using sigmoid
+                raw_heuristic = heuristic(move, node.state, node.state.current_player)
+                child.heuristic_score = sigmoid(raw_heuristic, self.heuristic_scale)
             except (TypeError, ValueError):
+                # Fallback: use domain knowledge (already [0,1])
                 child.heuristic_score = self.domain_knowledge(child.state, node.state.current_player)
             
             node.children.append(child)
             return child
         return node
 
+    def find_reusable_subtree(self, target_state):
+        """Tìm node trong cây hiện tại có thể tái sử dụng"""
+        if not self.root:
+            return None
+        
+        queue = [self.root]
+        visited = set()
+        
+        while queue:
+            node = queue.pop(0)
+            
+            if id(node) in visited:
+                continue
+            visited.add(id(node))
+            
+            if node.state_equals(target_state):
+                node.parent = None
+                return node
+            
+            if len(visited) < 100:
+                queue.extend(node.children)
+        
+        return None
+
+    def prune_tree(self, node, max_depth=None):
+        """Cắt tỉa cây để tiết kiệm memory"""
+        if max_depth is None:
+            max_depth = self.max_tree_depth
+        
+        def _prune_recursive(current_node, depth):
+            if depth >= max_depth:
+                current_node.children = []
+                return
+            
+            if current_node.children:
+                current_node.children.sort(key=lambda c: c.visits, reverse=True)
+                keep_count = min(len(current_node.children), 10)
+                current_node.children = current_node.children[:keep_count]
+                
+                for child in current_node.children:
+                    _prune_recursive(child, depth + 1)
+        
+        _prune_recursive(node, 0)
+
     def heavy_playout(self, state):
+        """Heavy playout đơn giản - chỉ dùng evaluate()"""
         sim_state = state.copy()
-        player = state.current_player
+        original_player = state.current_player
         depth = 0
         
         while not sim_state.is_game_over() and depth < self.heavy_playout_depth:
@@ -70,16 +151,20 @@ class MCTSDomainAgent:
             if not moves:
                 break
                 
-            # Convert moves to list if needed
             moves_list = list(moves) if not isinstance(moves, list) else moves
             
             if np.random.random() < self.heavy_playout_threshold and len(moves_list) > 1:
                 try:
-                    scores = [heuristic(sim_state, move, player) for move in moves_list]
-                    max_score = max(scores)
-                    best_moves = [move for move, score in zip(moves_list, scores) if score == max_score]
-                    move = best_moves[np.random.randint(len(best_moves))]
-                except (TypeError, ValueError):
+                    # Get heuristic scores and normalize with sigmoid
+                    scores = [heuristic(move, sim_state, sim_state.current_player) for move in moves_list]
+                    sigmoid_scores = [sigmoid(score, self.heuristic_scale) for score in scores]
+                    
+                    # Softmax selection based on sigmoid scores
+                    exp_scores = np.exp(np.array(sigmoid_scores) * 2)  # Temperature = 0.5
+                    probs = exp_scores / np.sum(exp_scores)
+                    move_idx = np.random.choice(len(moves_list), p=probs)
+                    move = moves_list[move_idx]
+                except (TypeError, ValueError, IndexError):
                     move = moves_list[np.random.randint(len(moves_list))]
             else:
                 move = moves_list[np.random.randint(len(moves_list))]
@@ -87,17 +172,18 @@ class MCTSDomainAgent:
             sim_state.make_move(move)
             depth += 1
             
-        if sim_state.is_game_over():
-            result = sim_state.get_winner()
-            return 1 if result == player else 0 if result == 0 else -1
-        return self.domain_knowledge(sim_state, player)
+        # Đơn giản: chỉ dùng evaluate() đã có sẵn [0,1]
+        return self.domain_knowledge(sim_state, original_player)
 
     def tournament_round(self, node, simulations, keep_top=None):
+        # Expand all untried moves first
         while node.untried_moves:
             self.expand(node)
             
+        # Run simulations for each child
         for child in node.children:
-            for _ in range(simulations):
+            sims_per_child = simulations // len(node.children) if node.children else simulations
+            for _ in range(sims_per_child):
                 result = self.heavy_playout(child.state)
                 self.backpropagate(child, result, node.state.current_player)
                 
@@ -106,35 +192,123 @@ class MCTSDomainAgent:
         return node.children
 
     def backpropagate(self, node, result, root_player):
+        """Backpropagation với result từ evaluate() [0,1]"""
         while node:
             node.visits += 1
+            
+            # result đã là [0,1] từ evaluate()
+            # Xử lý perspective switching
             if node.state.current_player == root_player:
+                # Same player as root - use result directly
                 node.value += result
             else:
-                node.value += 1 - result
+                # Opponent player - flip the result
+                node.value += (1.0 - result)
+            
             node = node.parent
+
+    def update_game_history(self, state):
+        """Cập nhật lịch sử game để track states"""
+        self.previous_states.append(state.copy())
+        if len(self.previous_states) > 20:
+            self.previous_states.pop(0)
 
     def get_move(self, state):
         if not state.get_legal_moves():
             return None
-            
-        root = MCTSNode(state)
-        root_player = state.current_player
         
+        # Update game history
+        self.update_game_history(state)
+        
+        # Try to reuse existing tree
+        reused_root = self.find_reusable_subtree(state)
+        
+        if reused_root:
+            print(f"🌲 Reusing tree with {reused_root.visits} visits")
+            root = reused_root
+            self.prune_tree(root)
+        else:
+            print("🌱 Creating new tree")
+            root = MCTSNode(state)
+        
+        root_player = state.current_player
         params = self.tournament_params
         
+        # Tournament rounds
         candidates = self.tournament_round(root, params['round1']['simulations'])
         
         if len(candidates) > params['round1']['keep_top']:
-            candidates = self.tournament_round(root,
-                                             params['round2']['simulations'],
-                                             params['round1']['keep_top'])
+            top_candidates = sorted(candidates, key=lambda c: c.visits, reverse=True)[:params['round1']['keep_top']]
+            for candidate in top_candidates:
+                sims_per_candidate = params['round2']['simulations'] // len(top_candidates)
+                for _ in range(sims_per_candidate):
+                    result = self.heavy_playout(candidate.state)
+                    self.backpropagate(candidate, result, root_player)
+            candidates = top_candidates
         
         if len(candidates) > params['round2']['keep_top']:
-            candidates = self.tournament_round(root,
-                                             params['round3']['simulations'],
-                                             params['round2']['keep_top'])
+            top_candidates = sorted(candidates, key=lambda c: c.visits, reverse=True)[:params['round2']['keep_top']]
+            for candidate in top_candidates:
+                sims_per_candidate = params['round3']['simulations'] // len(top_candidates)
+                for _ in range(sims_per_candidate):
+                    result = self.heavy_playout(candidate.state)
+                    self.backpropagate(candidate, result, root_player)
+            candidates = top_candidates
         
         if not candidates:
             return None
-        return max(candidates, key=lambda c: c.visits).move
+        
+        # Select best move based on win rate (value/visits)
+        best_child = max(candidates, key=lambda c: c.value / c.visits if c.visits > 0 else 0)
+        
+        # Save tree for next iteration
+        self.root = best_child
+        self.root.parent = None
+        
+        win_rate = best_child.value / best_child.visits if best_child.visits > 0 else 0
+        print(f"🎯 Selected move with {best_child.visits} visits, win rate: {win_rate:.3f}")
+        
+        return best_child.move
+
+    def reset_tree(self):
+        """Reset tree manually if needed"""
+        self.root = None
+        self.previous_states = []
+        print("🗑️ Tree reset")
+
+    def get_tree_stats(self):
+        """Get statistics about current tree"""
+        if not self.root:
+            return {"nodes": 0, "depth": 0, "total_visits": 0, "win_rate": 0}
+        
+        def count_nodes(node, depth=0):
+            count = 1
+            max_depth = depth
+            total_visits = node.visits
+            
+            for child in node.children:
+                child_count, child_depth, child_visits = count_nodes(child, depth + 1)
+                count += child_count
+                max_depth = max(max_depth, child_depth)
+                total_visits += child_visits
+            
+            return count, max_depth, total_visits
+        
+        nodes, depth, visits = count_nodes(self.root)
+        root_win_rate = self.root.value / self.root.visits if self.root.visits > 0 else 0
+        
+        return {
+            "nodes": nodes,
+            "depth": depth, 
+            "total_visits": visits,
+            "root_visits": self.root.visits,
+            "root_win_rate": root_win_rate
+        }
+
+    def debug_sigmoid_values(self, raw_values):
+        """Debug helper to see sigmoid transformations"""
+        print("Sigmoid transformations:")
+        for raw_val in raw_values:
+            heuristic_sig = sigmoid(raw_val, self.heuristic_scale)
+            eval_sig = sigmoid(raw_val, self.evaluation_scale)
+            print(f"Raw: {raw_val:6.2f} -> Heuristic: {heuristic_sig:.3f}, Eval: {eval_sig:.3f}")
