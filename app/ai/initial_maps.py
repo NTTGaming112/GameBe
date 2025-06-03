@@ -1,8 +1,5 @@
 import numpy as np
 
-# Board size
-BOARD_SIZE = 7
-
 # List of initial board configurations
 INITIAL_MAPS = [
     # MAP1

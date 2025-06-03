@@ -1,5 +1,6 @@
 import numpy as np
 from heuristics import evaluate, heuristic
+from constants import DEFAULT_MCTS_DOMAIN_ITERATIONS
 
 class MCTSNode:
     def __init__(self, state, parent=None, move=None):
@@ -13,7 +14,7 @@ class MCTSNode:
         self.heuristic_score = 0
 
 class MCTSDomainAgent:
-    def __init__(self, iterations=1000, tournament_params=None):
+    def __init__(self, iterations=DEFAULT_MCTS_DOMAIN_ITERATIONS, tournament_params=None):
         self.iterations = iterations
         self.c = 1.41
         self.pb_c = 0.1

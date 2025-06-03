@@ -1,9 +1,7 @@
 import random
 import math
 from heuristics import evaluate
-
-# Constants
-UCT_C = 1.41
+from constants import DEFAULT_MCTS_ITERATIONS
 
 class MCTSNode:
     def __init__(self, state, move=None, parent=None):
@@ -13,10 +11,18 @@ class MCTSNode:
         self.children = []
         self.visits = 0
         self.value = 0.0
+        self.uct_c = 1.41
         self.untried_moves = state.get_legal_moves()
 
     def select_child(self):
-        return max(self.children, key=lambda c: c.value / c.visits + UCT_C * math.sqrt(2 * math.log(self.visits) / c.visits) if c.visits > 0 else float('inf'))
+        def ucb1_value(c):
+            if c.visits == 0:
+                return float('inf')
+            exploitation = c.value / c.visits
+            exploration = self.uct_c * math.sqrt(math.log(self.visits) / c.visits)
+            return exploitation + exploration
+        
+        return max(self.children, key=ucb1_value)
 
     def expand(self):
         move = self.untried_moves.pop(0)
@@ -27,19 +33,24 @@ class MCTSNode:
         return child
 
 class MCTSAgent:
-    def __init__(self, iterations=300):
+    def __init__(self, iterations=DEFAULT_MCTS_ITERATIONS):
         self.iterations = iterations
 
     def get_move(self, state):
         root = MCTSNode(state)
+        root_player = state.current_player
+        
         for _ in range(self.iterations):
             node = root
+            
             # Selection
             while node.untried_moves == [] and node.children != []:
                 node = node.select_child()
+            
             # Expansion
             if node.untried_moves:
                 node = node.expand()
+            
             # Simulation
             sim_state = node.state.copy()
             while not sim_state.is_game_over():
@@ -47,13 +58,24 @@ class MCTSAgent:
                 if not moves:
                     break
                 sim_state.make_move(random.choice(moves))
-            result = evaluate(sim_state, state.current_player)
+            
+            # Đánh giá kết quả theo root player
+            result = evaluate(sim_state, root_player)
+            
             # Backpropagation
             while node:
                 node.visits += 1
-                # score là từ góc nhìn của player tại nút gốc
-                # Đổi dấu nếu là đối thủ
-                node.value += result if node.state.current_player == state.current_player else 1 - result
+                
+                if node.state.current_player == root_player:
+                    node.value += result
+                else:
+                    node.value += (1 - result)
+                
                 node = node.parent
 
-        return max(root.children, key=lambda c: c.visits).move if root.children else None
+        if not root.children:
+            return None
+            
+        # Chọn move có nhiều visits nhất (robust choice)
+        best_child = max(root.children, key=lambda c: c.visits)
+        return best_child.move

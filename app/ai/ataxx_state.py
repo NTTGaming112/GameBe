@@ -1,18 +1,16 @@
 import numpy as np
-
-# Constants
-BOARD_SIZE = 7
+from constants import BOARD_SIZE, EMPTY, PLAYER_1, PLAYER_2
 
 class AtaxxState:
     def __init__(self, initial_board=None):
         if initial_board is None:
             self.board = np.zeros((BOARD_SIZE, BOARD_SIZE), dtype=int)
             # Default starting positions
-            self.board[0][0] = self.board[6][6] = 1
-            self.board[0][6] = self.board[6][0] = -1
+            self.board[0][0] = self.board[6][6] = PLAYER_1
+            self.board[0][6] = self.board[6][0] = PLAYER_2
         else:
             self.board = initial_board.copy()
-        self.current_player = 1
+        self.current_player = PLAYER_1
 
     def copy(self):
         new_state = AtaxxState()
@@ -34,7 +32,7 @@ class AtaxxState:
                                 continue
                             nr, nc = r + dr, c + dc
                             if (0 <= nr < BOARD_SIZE and 0 <= nc < BOARD_SIZE and 
-                                self.board[nr][nc] == 0 and (nr, nc) not in clone_destinations):
+                                self.board[nr][nc] == EMPTY and (nr, nc) not in clone_destinations):
                                 moves.append((r, c, nr, nc))
                                 clone_destinations.add((nr, nc))
 
@@ -48,7 +46,7 @@ class AtaxxState:
                                 continue  # Skip clone moves and (0,0)
                             nr, nc = r + dr, c + dc
                             if (0 <= nr < BOARD_SIZE and 0 <= nc < BOARD_SIZE and 
-                                self.board[nr][nc] == 0 and (nr, nc) not in clone_destinations):
+                                self.board[nr][nc] == EMPTY and (nr, nc) not in clone_destinations):
                                 moves.append((r, c, nr, nc))
                                 clone_destinations.add((nr, nc))  # Prevent duplicates
 
@@ -59,7 +57,7 @@ class AtaxxState:
         is_clone = abs(r - nr) <= 1 and abs(c - nc) <= 1
         self.board[nr][nc] = self.current_player
         if not is_clone:
-            self.board[r][c] = 0
+            self.board[r][c] = EMPTY
         # Capture opponent pieces
         for dr in [-1, 0, 1]:
             for dc in [-1, 0, 1]:
@@ -71,21 +69,21 @@ class AtaxxState:
         self.current_player = -self.current_player
 
     def is_game_over(self):
-        return len(self.get_legal_moves()) == 0 or np.sum(self.board == 0) == 0
+        return len(self.get_legal_moves()) == 0 or np.sum(self.board == EMPTY) == 0
 
     def get_winner(self):
         if not self.is_game_over():
             return 0
-        own = np.sum(self.board == 1)
-        opp = np.sum(self.board == -1)
+        own = np.sum(self.board == PLAYER_1)
+        opp = np.sum(self.board == PLAYER_2)
         if own > opp:
-            return 1
+            return PLAYER_1
         elif opp > own:
-            return -1
+            return PLAYER_2
         return 0
     
     def get_empty_cells(self):
-        return np.sum(self.board == 0)
+        return np.sum(self.board == EMPTY)
 
     def display_board(self):
         # Color codes
@@ -121,5 +119,5 @@ class AtaxxState:
             print()
         
         # Print current player
-        player_color = COLORS['X'] if self.current_player == 1 else COLORS['O']
-        print(f"Current player: {player_color}{'X' if self.current_player == 1 else 'O'}{COLORS['reset']}")
+        player_color = COLORS['X'] if self.current_player == PLAYER_1 else COLORS['O']
+        print(f"Current player: {player_color}{'X' if self.current_player == PLAYER_1 else 'O'}{COLORS['reset']}")

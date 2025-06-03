@@ -1,8 +1,9 @@
 import time
 from heuristics import evaluate
+from constants import DEFAULT_MINIMAX_DEPTH, BOARD_SIZE
 
 class MinimaxAgent:
-    def __init__(self, max_depth=4, time_limit=None):
+    def __init__(self, max_depth=DEFAULT_MINIMAX_DEPTH, time_limit=None):
         self.max_depth = max_depth
         self.time_limit = time_limit
 
@@ -20,7 +21,7 @@ class MinimaxAgent:
                     if dr == 0 and dc == 0:
                         continue
                     nnr, nnc = nr + dr, nc + dc
-                    if (0 <= nnr < 7 and 0 <= nnc < 7 and
+                    if (0 <= nnr < BOARD_SIZE and 0 <= nnc < BOARD_SIZE and
                             state.board[nnr][nnc] == -state.current_player):
                         score += 1
             move_scores.append((move, score))
