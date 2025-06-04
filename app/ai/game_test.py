@@ -11,7 +11,6 @@ from mcts_agent import MCTSAgent
 from mcts_domain_agent import MCTSDomainAgent
 from ab_mcts_domain_agent import ABMCTSDomainAgent
 
-# Pygame constants
 CELL_SIZE = 80
 BOARD_SIZE = 7
 WINDOW_WIDTH = BOARD_SIZE * CELL_SIZE + 300
@@ -25,7 +24,6 @@ COLORS = {
     'bg': (200, 200, 200)
 }
 
-# Nhúng file map cho Pyodide
 MAP_FILES = {
     "position_3_3_empty_w.txt": """WWWWWWW\nBWWWWWW\nWWWBBBW\nWBBBBBW\nWBBBBBW\n#BBBBBB\n##WBBBW"""
 }
@@ -52,7 +50,7 @@ def read_map_file(filename):
             elif char == 'W':
                 board[r][c] = -1
             elif char == '#':
-                board[r][c] = 0  # Ô trống
+                board[r][c] = 0
     return board
 
 class AtaxxGame:
@@ -67,7 +65,7 @@ class AtaxxGame:
         if self.display not in ['pygame', 'terminal']:
             raise ValueError("Display must be 'pygame' or 'terminal'")
         self.agents = {
-            "Minimax+AB": MinimaxAgent(max_depth=2),
+            "Minimax+AB": MinimaxAgent(max_depth=4),
             "MCTS_300": MCTSAgent(iterations=self.iterations),
             "MCTS_Domain_300": MCTSDomainAgent(iterations=self.iterations),
             "MCTS_Domain_600": MCTSDomainAgent(iterations=max(self.iterations, 600)),
@@ -96,7 +94,10 @@ class AtaxxGame:
         pygame.init()
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Ataxx Tournament")
-        self.font = pygame.font.Font(None, 36)
+        try:
+            self.font = pygame.font.SysFont('Arial', 30)
+        except:
+            self.font = pygame.font.Font(None, 36)
 
     def draw_board(self):
         if not self.state:
@@ -104,18 +105,29 @@ class AtaxxGame:
         if self.display == 'terminal':
             self.state.display_board()
             return
-        self.screen.fill(COLORS['bg'])
+        
+        self.screen.fill((220, 220, 220))  
+        
         for r in range(BOARD_SIZE):
             for c in range(BOARD_SIZE):
                 x, y = c * CELL_SIZE, r * CELL_SIZE
-                pygame.draw.rect(self.screen, COLORS['white'], (x, y, CELL_SIZE, CELL_SIZE), 0)
-                pygame.draw.rect(self.screen, COLORS['black'], (x, y, CELL_SIZE, CELL_SIZE), 1)
+                pygame.draw.rect(self.screen, (255, 255, 255), (x, y, CELL_SIZE, CELL_SIZE), 0)
+                pygame.draw.rect(self.screen, (150, 150, 150), (x, y, CELL_SIZE, CELL_SIZE), 1)
                 if self.state.board[r][c] == 1:
-                    pygame.draw.circle(self.screen, COLORS['red'], (x + CELL_SIZE//2, y + CELL_SIZE//2), CELL_SIZE//3)
+                    pygame.draw.circle(self.screen, (200, 50, 50), (x + CELL_SIZE//2, y + CELL_SIZE//2), CELL_SIZE//3)
+                    pygame.draw.circle(self.screen, (255, 100, 100), (x + CELL_SIZE//2, y + CELL_SIZE//2), CELL_SIZE//3 - 3)
                 elif self.state.board[r][c] == -1:
-                    pygame.draw.circle(self.screen, COLORS['blue'], (x + CELL_SIZE//2, y + CELL_SIZE//2), CELL_SIZE//3)
+                    pygame.draw.circle(self.screen, (50, 50, 200), (x + CELL_SIZE//2, y + CELL_SIZE//2), CELL_SIZE//3)
+                    pygame.draw.circle(self.screen, (100, 100, 255), (x + CELL_SIZE//2, y + CELL_SIZE//2), CELL_SIZE//3 - 3)
                 elif self.state.board[r][c] == -2:
-                    pygame.draw.rect(self.screen, COLORS['gray'], (x + 5, y + 5, CELL_SIZE - 10, CELL_SIZE - 10))
+                    pygame.draw.rect(self.screen, (100, 100, 100), (x + 5, y + 5, CELL_SIZE - 10, CELL_SIZE - 10))
+        
+        info_box_x = BOARD_SIZE * CELL_SIZE + 10
+        info_box_y = 10
+        info_box_width = 280
+        info_box_height = 380
+        pygame.draw.rect(self.screen, (240, 240, 240), (info_box_x, info_box_y, info_box_width, info_box_height), 0)
+        pygame.draw.rect(self.screen, (150, 150, 150), (info_box_x, info_box_y, info_box_width, info_box_height), 2)
         
         x_pieces = np.sum(self.state.board == 1)
         o_pieces = np.sum(self.state.board == -1)
@@ -123,80 +135,84 @@ class AtaxxGame:
         info_texts = [
             f"{self.algo1} (X): {x_pieces}",
             f"{self.algo2} (O): {o_pieces}",
-            f"Player: {player}",
-            f"Map: {self.map_file or self.map_idx + 1}"
+            f"Turn: {player}",
+            f"Map: {self.map_file or 'Default'}"
         ]
         for i, text in enumerate(info_texts):
-            surface = self.font.render(text, True, COLORS['black'])
-            self.screen.blit(surface, (BOARD_SIZE * CELL_SIZE + 20, 20 + i * 40))
+            surface = self.font.render(text, True, (50, 50, 50))
+            self.screen.blit(surface, (info_box_x + 20, info_box_y + 20 + i * 40))
         
         pygame.display.flip()
 
     def draw_menu(self):
-        self.screen.fill(COLORS['bg'])
-        title = self.font.render("Ataxx Tournament Setup", True, COLORS['black'])
-        self.screen.blit(title, (WINDOW_WIDTH//2 - title.get_width()//2, 50))
+        self.screen.fill((220, 220, 220))
         
-        map_text = self.font.render(f"Map: {self.map_file}", True, COLORS['black'])
-        self.screen.blit(map_text, (100, 150))
-        map_prev = pygame.Rect(300, 145, 40, 40)
-        map_next = pygame.Rect(350, 145, 40, 40)
-        if not self.map_file:
-            pygame.draw.rect(self.screen, COLORS['gray'], map_prev)
-            pygame.draw.rect(self.screen, COLORS['gray'], map_next)
-            self.screen.blit(self.font.render("<", True, COLORS['black']), (310, 150))
-            self.screen.blit(self.font.render(">", True, COLORS['black']), (360, 150))
+        title = self.font.render("Ataxx Tournament", True, (50, 50, 50))
+        self.screen.blit(title, (WINDOW_WIDTH//2 - title.get_width()//2, 30))
         
-        games_text = self.font.render(f"Games per Match: {self.selected_games}", True, COLORS['black'])
-        self.screen.blit(games_text, (100, 220))
-        games_prev = pygame.Rect(300, 215, 40, 40)
-        games_next = pygame.Rect(350, 215, 40, 40)
-        pygame.draw.rect(self.screen, COLORS['gray'], games_prev)
-        pygame.draw.rect(self.screen, COLORS['gray'], games_next)
-        self.screen.blit(self.font.render("<", True, COLORS['black']), (310, 220))
-        self.screen.blit(self.font.render(">", True, COLORS['black']), (360, 220))
+        menu_box_x = 50
+        menu_box_y = 100
+        menu_box_width = WINDOW_WIDTH - 100
+        menu_box_height = 400
+        pygame.draw.rect(self.screen, (240, 240, 240), (menu_box_x, menu_box_y, menu_box_width, menu_box_height), 0)
+        pygame.draw.rect(self.screen, (150, 150, 150), (menu_box_x, menu_box_y, menu_box_width, menu_box_height), 2)
         
-        algo1_text = self.font.render(f"Algo1: {self.selected_algo1}", True, COLORS['black'])
-        self.screen.blit(algo1_text, (100, 290))
-        algo1_prev = pygame.Rect(300, 285, 40, 40)
-        algo1_next = pygame.Rect(350, 285, 40, 40)
-        pygame.draw.rect(self.screen, COLORS['gray'], algo1_prev)
-        pygame.draw.rect(self.screen, COLORS['gray'], algo1_next)
-        self.screen.blit(self.font.render("<", True, COLORS['black']), (310, 290))
-        self.screen.blit(self.font.render(">", True, COLORS['black']), (360, 290))
+        options = [
+            (f"Map: {self.map_file}", None, None),
+            (f"Games per Match: {self.selected_games}", "games_prev", "games_next"),
+            (f"Algo1 (X): {self.selected_algo1}", "algo1_prev", "algo1_next"),
+            (f"Algo2 (O): {self.selected_algo2}", "algo2_prev", "algo2_next"),
+            (f"First Player: {'X (White)' if self.first_player == 1 else 'O (Black)'}", "first_player_prev", "first_player_next")
+        ]
         
-        algo2_text = self.font.render(f"Algo2: {self.selected_algo2}", True, COLORS['black'])
-        self.screen.blit(algo2_text, (100, 360))
-        algo2_prev = pygame.Rect(300, 355, 40, 40)
-        algo2_next = pygame.Rect(350, 355, 40, 40)
-        pygame.draw.rect(self.screen, COLORS['gray'], algo2_prev)
-        pygame.draw.rect(self.screen, COLORS['gray'], algo2_next)
-        self.screen.blit(self.font.render("<", True, COLORS['black']), (310, 360))
-        self.screen.blit(self.font.render(">", True, COLORS['black']), (360, 360))
-
-        first_player_text = self.font.render(f"First Player: {self.first_player}", True, COLORS['black'])
-        self.screen.blit(first_player_text, (100, 430))
-        first_player_prev = pygame.Rect(300, 425, 40, 40)
-        first_player_next = pygame.Rect(350, 425, 40, 40)
-        pygame.draw.rect(self.screen, COLORS['gray'], first_player_prev)
-        pygame.draw.rect(self.screen, COLORS['gray'], first_player_next)
-        self.screen.blit(self.font.render("<", True, COLORS['black']), (310, 430))
-        self.screen.blit(self.font.render(">", True, COLORS['black']), (360, 430))
+        buttons = {}
+        for i, (text, prev_key, next_key) in enumerate(options):
+            y_pos = menu_box_y + 40 + i * 70
+            label = self.font.render(text, True, (50, 50, 50))
+            self.screen.blit(label, (menu_box_x + 30, y_pos))
+            
+            if prev_key and next_key:
+                prev_rect = pygame.Rect(menu_box_x + menu_box_width - 120, y_pos - 5, 40, 40)
+                next_rect = pygame.Rect(menu_box_x + menu_box_width - 60, y_pos - 5, 40, 40)
+                
+                mouse_pos = pygame.mouse.get_pos()
+                prev_color = (180, 180, 180) if prev_rect.collidepoint(mouse_pos) else (200, 200, 200)
+                next_color = (180, 180, 180) if next_rect.collidepoint(mouse_pos) else (200, 200, 200)
+                
+                pygame.draw.rect(self.screen, prev_color, prev_rect)
+                pygame.draw.rect(self.screen, next_color, next_rect)
+                pygame.draw.rect(self.screen, (150, 150, 150), prev_rect, 1)
+                pygame.draw.rect(self.screen, (150, 150, 150), next_rect, 1)
+                
+                prev_text = self.font.render("<", True, (50, 50, 50))
+                next_text = self.font.render(">", True, (50, 50, 50))
+                self.screen.blit(prev_text, (menu_box_x + menu_box_width - 110, y_pos))
+                self.screen.blit(next_text, (menu_box_x + menu_box_width - 50, y_pos))
+                
+                buttons[prev_key] = prev_rect
+                buttons[next_key] = next_rect
         
-        start_button = pygame.Rect(WINDOW_WIDTH//2 - 100, 430, 200, 50)
-        pygame.draw.rect(self.screen, COLORS['gray'], start_button)
-        start_text = self.font.render("Start Tournament", True, COLORS['black'])
-        self.screen.blit(start_text, (WINDOW_WIDTH//2 - start_text.get_width()//2, 440))
+        start_button = pygame.Rect(WINDOW_WIDTH//2 - 100, menu_box_y + menu_box_height - 60, 200, 50)
+        mouse_pos = pygame.mouse.get_pos()
+        start_color = (180, 180, 180) if start_button.collidepoint(mouse_pos) else (200, 200, 200)
+        pygame.draw.rect(self.screen, start_color, start_button)
+        pygame.draw.rect(self.screen, (150, 150, 150), start_button, 1)
+        start_text = self.font.render("Start", True, (50, 50, 50))
+        self.screen.blit(start_text, (WINDOW_WIDTH//2 - start_text.get_width()//2, menu_box_y + menu_box_height - 50))
+        buttons['start_button'] = start_button
         
         pygame.display.flip()
-        return map_prev, map_next, games_prev, games_next, algo1_prev, algo1_next, algo2_prev, algo2_next, start_button
+        return buttons.get('map_prev'), buttons.get('map_next'), buttons.get('games_prev'), buttons.get('games_next'), \
+            buttons.get('algo1_prev'), buttons.get('algo1_next'), buttons.get('algo2_prev'), buttons.get('algo2_next'), \
+            buttons.get('first_player_prev'), buttons.get('first_player_next'), buttons.get('start_button')
 
     async def run_menu(self):
         if self.display != 'pygame':
             return
         while self.menu_active and self.running:
             buttons = self.draw_menu()
-            games_prev, games_next, algo1_prev, algo1_next, algo2_prev, algo2_next, first_player_prev, first_player_next, start_button = buttons
+            map_prev, map_next, games_prev, games_next, algo1_prev, algo1_next, algo2_prev, algo2_next, \
+            first_player_prev, first_player_next, start_button = buttons
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
@@ -247,14 +263,11 @@ class AtaxxGame:
             
             if not legal_moves:
                 print(f"Player {self.state.current_player} has no legal moves - PASS")
-                
                 self.state.current_player = -self.state.current_player
-                
                 opponent_moves = self.state.get_legal_moves()
                 if not opponent_moves:
                     print("Both players have no legal moves - game ends")
                     break
-                
                 continue
             
             agent_name = agent1_name if (forward and self.state.current_player == 1) or (not forward and self.state.current_player == -1) else agent2_name
@@ -281,7 +294,7 @@ class AtaxxGame:
             else:
                 print(f"\n{agent_name} has no legal moves - PASS")
                 self.state.current_player = -self.state.current_player
-            
+        
         winner = self.state.get_winner()
         p1_name = agent1_name if forward else agent2_name
         p2_name = agent2_name if forward else agent1_name
@@ -304,8 +317,15 @@ class AtaxxGame:
             print("Draw")
         
         if self.display == 'pygame':
-            result_text = self.font.render(f"Winner: {'Draw' if winner == 0 else p1_name if winner == 1 else p2_name}", True, COLORS['black'])
-            self.screen.blit(result_text, (BOARD_SIZE * CELL_SIZE + 20, WINDOW_HEIGHT - 80))
+            result_box_x = 10
+            result_box_y = BOARD_SIZE * CELL_SIZE + 10
+            result_box_width = BOARD_SIZE * CELL_SIZE + 280
+            result_box_height = 80
+            pygame.draw.rect(self.screen, (240, 240, 240), (result_box_x, result_box_y, result_box_width, result_box_height), 0)
+            pygame.draw.rect(self.screen, (150, 150, 150), (result_box_x, result_box_y, result_box_width, result_box_height), 2)
+            
+            result_text = self.font.render(f"Winner: {'Draw' if winner == 0 else p1_name if winner == 1 else p2_name}", True, (50, 50, 50))
+            self.screen.blit(result_text, (result_box_x + 20, result_box_y + 20))
             pygame.display.flip()
             await asyncio.sleep(2)
 
@@ -352,21 +372,39 @@ class AtaxxGame:
         
         print(f"\nTournament Results ({self.algo1} vs {self.algo2}):")
         if self.display == 'pygame':
-            result_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
-            result_surface.fill(COLORS['bg'])
-            y_offset = 50
-        for name in self.results:
-            if self.results[name]["games_played"] > 0:
-                self.results[name]["avg_pieces"] /= self.results[name]["games_played"]
-                result_text = (f"{name}: Wins={self.results[name]['wins']}, Losses={self.results[name]['losses']}, "
-                               f"Draws={self.results[name]['draws']}, Avg Pieces={self.results[name]['avg_pieces']:.2f}")
-                print(result_text)
-                if self.display == 'pygame':
-                    surface = self.font.render(result_text, True, COLORS['black'])
-                    result_surface.blit(surface, (20, y_offset))
-                    y_offset += 40
+            self.screen.fill((220, 220, 220))
+            
+            result_box_x = 50
+            result_box_y = 50
+            result_box_width = WINDOW_WIDTH - 100
+            result_box_height = WINDOW_HEIGHT - 100
+            pygame.draw.rect(self.screen, (240, 240, 240), (result_box_x, result_box_y, result_box_width, result_box_height), 0)
+            pygame.draw.rect(self.screen, (150, 150, 150), (result_box_x, result_box_y, result_box_width, result_box_height), 2)
+            
+            # Tiêu đề
+            title = self.font.render("Tournament Results", True, (50, 50, 50))
+            self.screen.blit(title, (WINDOW_WIDTH//2 - title.get_width()//2, result_box_y + 20))
+            
+            y_offset = result_box_y + 80
+            for name in self.results:
+                if self.results[name]["games_played"] > 0:
+                    self.results[name]["avg_pieces"] /= self.results[name]["games_played"]
+                    result_text = (f"{name}: Wins={self.results[name]['wins']}, Losses={self.results[name]['losses']}, "
+                                f"Draws={self.results[name]['draws']}, Avg Pieces={self.results[name]['avg_pieces']:.2f}")
+                    print(result_text)
+                    surface = self.font.render(result_text, True, (50, 50, 50))
+                    self.screen.blit(surface, (result_box_x + 30, y_offset))
+                    y_offset += 50
+        
+        else:
+            for name in self.results:
+                if self.results[name]["games_played"] > 0:
+                    self.results[name]["avg_pieces"] /= self.results[name]["games_played"]
+                    result_text = (f"{name}: Wins={self.results[name]['wins']}, Losses={self.results[name]['losses']}, "
+                                f"Draws={self.results[name]['draws']}, Avg Pieces={self.results[name]['avg_pieces']:.2f}")
+                    print(result_text)
+        
         if self.display == 'pygame':
-            self.screen.blit(result_surface, (0, 0))
             pygame.display.flip()
             while self.running:
                 for event in pygame.event.get():
@@ -382,7 +420,7 @@ def parse_args():
     parser.add_argument("--iterations", type=int, default=300, help="MCTS iterations")
     parser.add_argument("--algo1", type=str, default="MCTS_Domain_600", help="First agent")
     parser.add_argument("--algo2", type=str, default="Minimax+AB", help="Second agent")
-    parser.add_argument("--display", type=str, default="pygame", help="Display mode: pygame or terminal")
+    parser.add_argument("--display", type=str, default="terminal", help="Display mode: pygame or terminal")
     parser.add_argument("--delay", type=float, default=0.5, help="Delay per move (seconds)")
     parser.add_argument("--first_player", type=str, default="W", help="First player (White or Black)")
     return parser.parse_args()
@@ -406,7 +444,6 @@ async def main():
             pygame.quit()
     except ValueError as e:
         print(e)
-        print("Available agents:", ["Minimax+AB", "MCTS_300", "MCTS_Domain_300", "MCTS_Domain_600", "AB+MCTS_Domain_600"])
         exit(1)
 
 if platform.system() == "Emscripten":
