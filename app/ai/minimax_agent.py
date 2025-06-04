@@ -15,7 +15,6 @@ class MinimaxAgent:
         for move in moves:
             r, c, nr, nc = move
             score = 0
-            # Count flipped pieces
             for dr in [-1, 0, 1]:
                 for dc in [-1, 0, 1]:
                     if dr == 0 and dc == 0:
@@ -29,16 +28,13 @@ class MinimaxAgent:
         return [move for move, _ in move_scores]
 
     def minimax(self, state, depth, alpha, beta, maximizingPlayer, max_depth):
-        empty_cells = state.get_empty_cells()
-        if empty_cells <= 5:
-            max_depth = min(max_depth, 5)
-        if empty_cells <= 2:
-            max_depth = min(max_depth, 6)
         if depth >= max_depth or state.is_game_over():
             return evaluate(state, 1), None
+        
         moves = self.get_ordered_moves(state)
         if not moves:
             return evaluate(state, 1), None
+        
         if maximizingPlayer:
             maxEval = float('-inf')
             best_move = None
@@ -53,6 +49,7 @@ class MinimaxAgent:
                 if beta <= alpha:
                     break
             return maxEval, best_move
+        
         else:
             minEval = float('inf')
             best_move = None
@@ -69,12 +66,16 @@ class MinimaxAgent:
             return minEval, best_move
 
     def get_move(self, state):
+        if not state.get_legal_moves():
+            return None
+        
         start_time = time.time()
         best_move = None
         for depth in range(1, self.max_depth + 1):
             if self.time_limit is not None:
                 if time.time() - start_time > self.time_limit:
                     break
+                
             _, move = self.minimax(state, 0, float('-inf'), float('inf'), True, depth)
             if move:
                 best_move = move

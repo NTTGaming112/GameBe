@@ -12,9 +12,8 @@ class MCTSNode:
         self.children = []
         self.visits = 0
         self.value = 0.0
-        self.uct_c = 1.41
-        self.untried_moves = list(state.get_legal_moves())  # Convert to list
-        # Thêm hash để so sánh state nhanh hơn
+        self.uct_c = 1.41  
+        self.untried_moves = list(state.get_legal_moves())  
         self._state_hash = self._compute_state_hash()
     
     def _compute_state_hash(self):
@@ -50,121 +49,105 @@ class MCTSNode:
 class MCTSAgent:
     def __init__(self, iterations=DEFAULT_MCTS_ITERATIONS):
         self.iterations = iterations
-        self.root = None  # Lưu trữ root node để tái sử dụng
-        self.game_history = []  # Track game history
-        self.max_tree_size = 10000  # Giới hạn kích thước tree
-        
+        self.root = None  
+        self.game_history = []  
+        self.max_tree_size = 10000  
+
     def get_move(self, state):
-        # Cập nhật game history
-        self.game_history.append(state.copy())
+        """Get the best move using MCTS."""
+
+        if not state.get_legal_moves():
+            return None
         
-        # Tìm kiếm node có thể tái sử dụng
+        self.game_history.append(state.copy())
         reused_root = self._find_reusable_subtree(state)
         
         if reused_root:
             print(f"♻️ Reusing tree with {reused_root.visits} visits")
             root = reused_root
-            # Prune tree nếu quá lớn
             self._prune_tree(root)
+
         else:
             print("🌱 Creating new tree")
             root = MCTSNode(state)
 
         root_player = state.current_player
         
-        # MCTS iterations
         for iteration in range(self.iterations):
             node = root
             
-            # Selection
             while node.untried_moves == [] and node.children != []:
                 node = node.select_child()
             
-            # Expansion
             if node.untried_moves:
                 node = node.expand()
             
-            # Simulation
             result = self._simulate(node.state, root_player)
             
-            # Backpropagation
             self._backpropagate(node, result, root_player)
             
-            # Early stopping nếu có move rõ ràng tốt nhất
             if iteration > 50 and iteration % 50 == 0:
                 if self._should_stop_early(root):
                     print(f"⏹️ Early stop at iteration {iteration}")
                     break
 
-        # Chọn move tốt nhất
         if not root.children:
-            # Fallback nếu không có children
             moves = state.get_legal_moves()
             return list(moves)[0] if moves else None
         
-        # Chọn child có visits cao nhất (robust choice)
         best_child = max(root.children, key=lambda c: c.visits)
         
-        # Cập nhật root cho lần sau
         self.root = best_child
-        self.root.parent = None  # Detach từ parent cũ
-        
+        self.root.parent = None  
+
         print(f"🎯 Selected move: {best_child.move}, visits: {best_child.visits}, value: {best_child.value/best_child.visits:.3f}")
         
         return best_child.move
     
     def _simulate(self, state, root_player):
-        """Simulation trả về kết quả theo perspective của root_player"""
+        """Simulate a random game from the given state to estimate the value of the state."""
         sim_state = state.copy()
         depth = 0
         max_depth = 100
+        consecutive_passes = 0
         
         while not sim_state.is_game_over() and depth < max_depth:
             moves = sim_state.get_legal_moves()
             if not moves:
-                break
-            sim_state.make_move(random.choice(list(moves)))
-            depth += 1
-        
-        # Đánh giá theo root_player và normalize về [-1, 1]
-        if sim_state.is_game_over():
-            winner = sim_state.get_winner()
-            if winner == root_player:
-                return 1.0
-            elif winner == -root_player:
-                return -1.0
+                sim_state.current_player = -sim_state.current_player
+                consecutive_passes += 1
+
+                if consecutive_passes >= 2:
+                    break
+                
             else:
-                return 0.0  # Draw
-        
-        # Convert evaluate result từ [0,1] về [-1,1]
+                consecutive_passes = 0
+                sim_state.make_move(random.choice(list(moves)))
+                
+            depth += 1
+
         eval_score = evaluate(sim_state, root_player)
-        return 2 * eval_score - 1  # [0,1] -> [-1,1]
+        return eval_score  
     
     def _backpropagate(self, node, result, root_player):
-        """Backpropagation với perspective switching"""
-        current_result = result
-        
         while node:
             node.visits += 1
             
-            # Đơn giản hóa: luôn cộng result theo perspective của node
-            # Nếu node.state.current_player khác root_player thì flip result
             if node.state.current_player == root_player:
-                node.value += current_result
+                node.value += result
             else:
-                node.value -= current_result
-            
+                node.value += (1-result)  
+
             node = node.parent
     
     def _find_reusable_subtree(self, target_state):
-        """Tìm node có thể tái sử dụng từ cây cũ"""
+        """Find a reusable subtree in the MCTS tree that matches the target state."""
         if not self.root:
             return None
         
-        # BFS search trong tree
         queue = [self.root]
         visited = set()
-        search_limit = 200  # Giới hạn search để tránh chậm
+        search_limit = 200  
         
         while queue and len(visited) < search_limit:
             node = queue.pop(0)
@@ -174,17 +157,15 @@ class MCTSAgent:
             visited.add(id(node))
             
             if node.state_equals(target_state):
-                # Detach node từ parent
                 node.parent = None
                 return node
             
-            # Thêm children vào queue
             queue.extend(node.children)
         
         return None
     
     def _prune_tree(self, root):
-        """Cắt tỉa tree để tiết kiệm memory"""
+        """Prune the MCTS tree if it exceeds max_tree_size."""
         def count_nodes(node):
             count = 1
             for child in node.children:
@@ -195,7 +176,7 @@ class MCTSAgent:
         
         if total_nodes > self.max_tree_size:
             print(f"🌲 Pruning tree: {total_nodes} -> ", end="")
-            self._prune_recursive(root, max_depth=8)  # Limit depth
+            self._prune_recursive(root, max_depth=8)  
             print(f"{count_nodes(root)} nodes")
     
     def _prune_recursive(self, node, depth=0, max_depth=8):
@@ -205,24 +186,20 @@ class MCTSAgent:
             return
         
         if node.children:
-            # Giữ lại top children có visits cao
             node.children.sort(key=lambda c: c.visits, reverse=True)
-            keep_count = min(len(node.children), 5)  # Keep top 5
+            keep_count = min(len(node.children), 5)  
             node.children = node.children[:keep_count]
             
-            # Continue pruning children
             for child in node.children:
                 self._prune_recursive(child, depth + 1, max_depth)
     
     def _should_stop_early(self, root):
-        """Kiểm tra có nên dừng sớm không"""
+        """Check stop condition for early termination"""
         if len(root.children) < 2:
             return False
         
-        # Sắp xếp children theo visits
         sorted_children = sorted(root.children, key=lambda c: c.visits, reverse=True)
         
-        # Nếu move tốt nhất có visits gấp đôi move thứ 2
         if len(sorted_children) >= 2:
             best_visits = sorted_children[0].visits
             second_visits = sorted_children[1].visits
@@ -233,7 +210,7 @@ class MCTSAgent:
         return False
     
     def get_tree_stats(self):
-        """Lấy thống kê về tree hiện tại"""
+        """Get statistics about the MCTS tree."""
         if not self.root:
             return {"nodes": 0, "depth": 0, "total_visits": 0}
         

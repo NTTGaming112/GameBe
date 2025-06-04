@@ -8,7 +8,7 @@ def sigmoid(x, scale=1.0):
 
 def inverse_sigmoid(y):
     """Inverse sigmoid for debugging purposes"""
-    y = np.clip(y, 1e-7, 1-1e-7)  # Avoid log(0)
+    y = np.clip(y, 1e-7, 1-1e-7) 
     return np.log(y / (1 - y))
 
 class MCTSNode:
@@ -20,7 +20,7 @@ class MCTSNode:
         self.visits = 0
         self.value = 0.0
         self.untried_moves = list(state.get_legal_moves())
-        self.heuristic_score = 0.5  # Default to neutral [0,1]
+        self.heuristic_score = 0.5  
         self._state_hash = self._compute_state_hash()
     
     def _compute_state_hash(self):
@@ -38,11 +38,9 @@ class MCTSDomainAgent:
         self.c = 1.41
         self.pb_c = 0.1
         self.domain_knowledge = evaluate
-        
-        # Sigmoid parameters - chỉ cần 2 loại
-        self.heuristic_scale = 5.0    # Scale for heuristic values
-        self.evaluation_scale = 2.0   # Scale for evaluation scores (optional smoothing)
-        
+        self.heuristic_scale = 5.0
+        self.evaluation_scale = 2.0
+
         self.tournament_params = tournament_params or {
             'round1': {'simulations': iterations, 'keep_top': 5},
             'round2': {'simulations': int(iterations * 1.5), 'keep_top': 3},
@@ -52,7 +50,6 @@ class MCTSDomainAgent:
         self.heavy_playout_threshold = 0.7
         self.heavy_playout_depth = 10
         
-        # Tree reuse components
         self.root = None
         self.previous_states = []
         self.max_tree_depth = 50
@@ -61,13 +58,10 @@ class MCTSDomainAgent:
         if node.visits == 0:
             return float('inf')
         
-        # Progressive bias với sigmoid-normalized heuristic
         pb_bonus = self.pb_c * node.heuristic_score / (node.visits + 1)
         
-        # Exploitation: average win rate (already in [0,1])
         exploitation = node.value / node.visits
         
-        # Exploration
         exploration = self.c * np.sqrt(np.log(parent_visits) / node.visits)
         
         return exploitation + exploration + pb_bonus
@@ -85,11 +79,9 @@ class MCTSDomainAgent:
             child = MCTSNode(new_state, parent=node, move=move)
             
             try:
-                # Normalize heuristic score using sigmoid
                 raw_heuristic = heuristic(move, node.state, node.state.current_player)
                 child.heuristic_score = sigmoid(raw_heuristic, self.heuristic_scale)
             except (TypeError, ValueError):
-                # Fallback: use domain knowledge (already [0,1])
                 child.heuristic_score = self.domain_knowledge(child.state, node.state.current_player)
             
             node.children.append(child)
@@ -97,7 +89,7 @@ class MCTSDomainAgent:
         return node
 
     def find_reusable_subtree(self, target_state):
-        """Tìm node trong cây hiện tại có thể tái sử dụng"""
+        """Find a reusable subtree in the MCTS tree that matches the target state."""
         if not self.root:
             return None
         
@@ -121,7 +113,7 @@ class MCTSDomainAgent:
         return None
 
     def prune_tree(self, node, max_depth=None):
-        """Cắt tỉa cây để tiết kiệm memory"""
+        """Prune the MCTS tree if it exceeds max_tree_size."""
         if max_depth is None:
             max_depth = self.max_tree_depth
         
@@ -141,7 +133,7 @@ class MCTSDomainAgent:
         _prune_recursive(node, 0)
 
     def heavy_playout(self, state):
-        """Heavy playout đơn giản - chỉ dùng evaluate()"""
+        """Heavy playout with heuristic-based move selection"""
         sim_state = state.copy()
         original_player = state.current_player
         depth = 0
@@ -155,12 +147,10 @@ class MCTSDomainAgent:
             
             if np.random.random() < self.heavy_playout_threshold and len(moves_list) > 1:
                 try:
-                    # Get heuristic scores and normalize with sigmoid
                     scores = [heuristic(move, sim_state, sim_state.current_player) for move in moves_list]
                     sigmoid_scores = [sigmoid(score, self.heuristic_scale) for score in scores]
                     
-                    # Softmax selection based on sigmoid scores
-                    exp_scores = np.exp(np.array(sigmoid_scores) * 2)  # Temperature = 0.5
+                    exp_scores = np.exp(np.array(sigmoid_scores) * 2)  
                     probs = exp_scores / np.sum(exp_scores)
                     move_idx = np.random.choice(len(moves_list), p=probs)
                     move = moves_list[move_idx]
@@ -172,15 +162,12 @@ class MCTSDomainAgent:
             sim_state.make_move(move)
             depth += 1
             
-        # Đơn giản: chỉ dùng evaluate() đã có sẵn [0,1]
         return self.domain_knowledge(sim_state, original_player)
 
     def tournament_round(self, node, simulations, keep_top=None):
-        # Expand all untried moves first
         while node.untried_moves:
             self.expand(node)
             
-        # Run simulations for each child
         for child in node.children:
             sims_per_child = simulations // len(node.children) if node.children else simulations
             for _ in range(sims_per_child):
@@ -196,13 +183,9 @@ class MCTSDomainAgent:
         while node:
             node.visits += 1
             
-            # result đã là [0,1] từ evaluate()
-            # Xử lý perspective switching
             if node.state.current_player == root_player:
-                # Same player as root - use result directly
                 node.value += result
             else:
-                # Opponent player - flip the result
                 node.value += (1.0 - result)
             
             node = node.parent
@@ -217,10 +200,8 @@ class MCTSDomainAgent:
         if not state.get_legal_moves():
             return None
         
-        # Update game history
         self.update_game_history(state)
         
-        # Try to reuse existing tree
         reused_root = self.find_reusable_subtree(state)
         
         if reused_root:
@@ -234,7 +215,6 @@ class MCTSDomainAgent:
         root_player = state.current_player
         params = self.tournament_params
         
-        # Tournament rounds
         candidates = self.tournament_round(root, params['round1']['simulations'])
         
         if len(candidates) > params['round1']['keep_top']:
@@ -258,10 +238,8 @@ class MCTSDomainAgent:
         if not candidates:
             return None
         
-        # Select best move based on win rate (value/visits)
         best_child = max(candidates, key=lambda c: c.value / c.visits if c.visits > 0 else 0)
         
-        # Save tree for next iteration
         self.root = best_child
         self.root.parent = None
         
