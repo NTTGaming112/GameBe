@@ -2,7 +2,7 @@ import numpy as np
 from constants import BOARD_SIZE, EMPTY, PLAYER_1, PLAYER_2
 
 class AtaxxState:
-    def __init__(self, initial_board=None):
+    def __init__(self, initial_board=None, current_player=PLAYER_1):
         if initial_board is None:
             self.board = np.zeros((BOARD_SIZE, BOARD_SIZE), dtype=int)
             self.board[0][0] = self.board[6][6] = PLAYER_1
@@ -10,7 +10,7 @@ class AtaxxState:
         else:
             self.board = initial_board.copy()
 
-        self.current_player = PLAYER_1
+        self.current_player = current_player
 
     def copy(self):
         new_state = AtaxxState()
@@ -87,6 +87,11 @@ class AtaxxState:
     
     def get_empty_cells(self):
         return np.sum(self.board == EMPTY)
+    
+    def get_player_cells(self, player):
+        if player not in (PLAYER_1, PLAYER_2):
+            raise ValueError("Invalid player. Use PLAYER_1 or PLAYER_2.")
+        return np.sum(self.board == player)
 
     def display_board(self):
         COLORS = {

@@ -1,15 +1,6 @@
 import numpy as np
-from heuristics import evaluate, heuristic
+from heuristics import evaluate, heuristic, sigmoid
 from constants import DEFAULT_MCTS_DOMAIN_ITERATIONS
-
-def sigmoid(x, scale=1.0):
-    """Sigmoid function to normalize values to [0,1]"""
-    return 1.0 / (1.0 + np.exp(-x / scale))
-
-def inverse_sigmoid(y):
-    """Inverse sigmoid for debugging purposes"""
-    y = np.clip(y, 1e-7, 1-1e-7) 
-    return np.log(y / (1 - y))
 
 class MCTSNode:
     def __init__(self, state, parent=None, move=None):
@@ -48,7 +39,7 @@ class MCTSDomainAgent:
         }
         
         self.heavy_playout_threshold = 0.7
-        self.heavy_playout_depth = 10
+        self.heavy_playout_depth = 50
         
         self.root = None
         self.previous_states = []
@@ -282,11 +273,3 @@ class MCTSDomainAgent:
             "root_visits": self.root.visits,
             "root_win_rate": root_win_rate
         }
-
-    def debug_sigmoid_values(self, raw_values):
-        """Debug helper to see sigmoid transformations"""
-        print("Sigmoid transformations:")
-        for raw_val in raw_values:
-            heuristic_sig = sigmoid(raw_val, self.heuristic_scale)
-            eval_sig = sigmoid(raw_val, self.evaluation_scale)
-            print(f"Raw: {raw_val:6.2f} -> Heuristic: {heuristic_sig:.3f}, Eval: {eval_sig:.3f}")

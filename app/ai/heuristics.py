@@ -37,24 +37,34 @@ def heuristic(move, state, player):
 def evaluate(state, player):
     own = np.sum(state.board == player)
     opp = np.sum(state.board == -player)
-    piece_diff = own - opp
     total_pieces = own + opp
+    piece_diff = own - opp
+    max_diff = 49  
+
+    if total_pieces > 0:
+        piece_ratio = own / total_pieces  
+    else:
+        piece_ratio = 0.5  
+    normalized_diff = piece_diff / max_diff  
+    f_i = sigmoid(normalized_diff, scale=1.0)  
 
     if state.is_game_over():
         winner = state.get_winner()
         if winner == player:
-            return 1.0
-        
+            b_i = 1.0  
         elif winner == -player:
-            return 0.0
-        
+            b_i = 0.0  
         else:
-            return 0.5
+            b_i = 0.5  
+    else:
+        b_i = piece_ratio
 
-    piece_ratio = own / total_pieces  
-    max_diff = 49  
-    normalized_diff = piece_diff / max_diff  
-    sigmoid_score = 1 / (1 + np.exp(-5 * normalized_diff))  
-    final_score = 0.7 * piece_ratio + 0.3 * sigmoid_score
-    
-    return max(0.0, min(1.0, final_score))
+    w_i = b_i * (ALPHA + BETA * f_i)
+
+    w_i = max(0.0, min(1.0, w_i))
+
+    return w_i
+
+def sigmoid(x, scale=1.0):
+    """Hàm sigmoid để chuẩn hóa giá trị về [0, 1]"""
+    return 1.0 / (1.0 + np.exp(-x / scale))
