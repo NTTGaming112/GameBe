@@ -1,0 +1,3 @@
+Agent,Wins,Losses,Draws,AvgPieces,TotalGames,Map
+Minimax+AB,3,7,0,22.0,10,position_6_14_empty_b.txt
+MCTS_Domain_300,7,3,0,27.0,10,position_6_14_empty_b.txt
