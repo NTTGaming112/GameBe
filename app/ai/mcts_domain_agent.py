@@ -1,275 +1,230 @@
+import random
 import numpy as np
-from heuristics import evaluate, heuristic, sigmoid
+from heuristics import evaluate, heuristic
 from constants import DEFAULT_MCTS_DOMAIN_ITERATIONS
+from mcts_agent import MCTSNode
+import math
 
-class MCTSNode:
+class MCTSDomainNode(MCTSNode):
     def __init__(self, state, parent=None, move=None):
-        self.state = state
-        self.parent = parent
-        self.move = move
-        self.children = []
-        self.visits = 0
-        self.value = 0.0
-        self.untried_moves = list(state.get_legal_moves())
-        self.heuristic_score = 0.5  
-        self._state_hash = self._compute_state_hash()
-    
-    def _compute_state_hash(self):
-        """Tính hash cho state để so sánh nhanh"""
-        return hash((self.state.board.tobytes(), self.state.current_player))
-    
-    def state_equals(self, other_state):
-        """So sánh state với state khác"""
-        return (self.state.current_player == other_state.current_player and 
-                np.array_equal(self.state.board, other_state.board))
+        super().__init__(state, parent, move)
+
+    def expand(self):
+        if not self.untried_moves:
+            return None
+        
+        scored_moves = [(move, heuristic(move, self.state, self.state.current_player)) 
+                    for move in self.untried_moves]
+        scored_moves.sort(key=lambda x: x[1], reverse=True)
+        
+        threshold = scored_moves[0][1] * 0.7
+        good_moves = [move for move, score in scored_moves if score >= threshold]
+        
+        if good_moves:
+            move = good_moves[0]  
+        else:
+            move = random.choice(self.untried_moves) 
+        
+        self.untried_moves.remove(move)
+        next_state = self.state.copy()
+        next_state.make_move(move)
+        child = MCTSDomainNode(state=next_state, parent=self, move=move)
+        self.children.append(child)
+        return child
+
+    def tournament_rollout(self, root_player, tournament_params):
+        moves = self.state.get_legal_moves()
+        if not moves:
+            return evaluate(self.state, root_player)
+        
+        move_scores = []
+        best_score_so_far = float('-inf')
+        
+        for move in moves:
+            total_score = 0
+            simulations_run = 0
+            
+            for sim_idx in range(tournament_params[0]['num_sim']):
+                sim_state = self.state.copy()
+                sim_state.make_move(move)
+                
+                while not sim_state.is_game_over():
+                    legal_moves = sim_state.get_legal_moves()
+                    if not legal_moves:
+                        sim_state.current_player = -sim_state.current_player
+                        continue
+                    
+                    scored_moves = [(m, heuristic(m, sim_state, sim_state.current_player)) 
+                                for m in legal_moves]
+                    scored_moves.sort(key=lambda x: x[1], reverse=True)
+                    best_move = scored_moves[0][0]
+                    sim_state.make_move(best_move)
+                
+                total_score += evaluate(sim_state, root_player)
+                simulations_run += 1
+                
+                if sim_idx >= 5:
+                    current_avg = total_score / simulations_run
+                    
+                    if current_avg < best_score_so_far - 0.3 and sim_idx >= 10:
+                        break
+                    
+                    if current_avg > best_score_so_far + 0.2 and sim_idx >= 15:
+                        break
+            
+            avg_score = total_score / simulations_run if simulations_run > 0 else 0
+            move_scores.append((move, avg_score, simulations_run))
+            best_score_so_far = max(best_score_so_far, avg_score)
+        
+        move_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        if len(move_scores) > 1 and move_scores[0][1] - move_scores[1][1] > 0.4:
+            return move_scores[0][1]  
+        
+        top_moves_r1 = [move for move, _, _ in move_scores[:tournament_params[0]['top_k']]]
+        
+        move_scores_r2 = []
+        for i, move in enumerate(top_moves_r1):
+            adaptive_sims = tournament_params[1]['num_sim'] + (len(top_moves_r1) - i - 1) * 10
+            
+            total_score = 0
+            simulations_run = 0
+            
+            for sim_idx in range(adaptive_sims):
+                sim_state = self.state.copy()
+                sim_state.make_move(move)
+                
+                while not sim_state.is_game_over():
+                    legal_moves = sim_state.get_legal_moves()
+                    if not legal_moves:
+                        sim_state.current_player = -sim_state.current_player
+                        continue
+                    
+                    scored_moves = [(m, heuristic(m, sim_state, sim_state.current_player)) 
+                                for m in legal_moves]
+                    scored_moves.sort(key=lambda x: x[1], reverse=True)
+                    best_move = scored_moves[0][0]
+                    sim_state.make_move(best_move)
+                
+                total_score += evaluate(sim_state, root_player)
+                simulations_run += 1
+                
+                if sim_idx >= 8:
+                    current_avg = total_score / simulations_run
+                    if sim_idx >= 20 and abs(current_avg - (total_score - evaluate(sim_state, root_player)) / (simulations_run - 1)) < 0.05:
+                        break
+            
+            avg_score = total_score / simulations_run if simulations_run > 0 else 0
+            move_scores_r2.append((move, avg_score, simulations_run))
+        
+        move_scores_r2.sort(key=lambda x: x[1], reverse=True)
+        
+        if len(move_scores_r2) > 1 and move_scores_r2[0][1] - move_scores_r2[1][1] > 0.3:
+            return move_scores_r2[0][1]
+        
+        top_moves_r2 = [move for move, _, _ in move_scores_r2[:tournament_params[1]['top_k']]]
+        
+        move_scores_r3 = []
+        for move in top_moves_r2:
+            total_score = 0
+            simulations_run = 0
+            variance_sum = 0
+            scores = []
+            
+            for sim_idx in range(tournament_params[2]['num_sim']):
+                sim_state = self.state.copy()
+                sim_state.make_move(move)
+                
+                while not sim_state.is_game_over():
+                    legal_moves = sim_state.get_legal_moves()
+                    if not legal_moves:
+                        sim_state.current_player = -sim_state.current_player
+                        continue
+                    
+                    scored_moves = [(m, heuristic(m, sim_state, sim_state.current_player)) 
+                                for m in legal_moves]
+                    scored_moves.sort(key=lambda x: x[1], reverse=True)
+                    best_move = scored_moves[0][0]
+                    sim_state.make_move(best_move)
+                
+                score = evaluate(sim_state, root_player)
+                total_score += score
+                scores.append(score)
+                simulations_run += 1
+                
+                if sim_idx >= 15:
+                    current_avg = total_score / simulations_run
+                    if len(scores) > 1:
+                        variance = np.var(scores)
+                        std_error = math.sqrt(variance / len(scores))
+                        
+                        if std_error < 0.1: 
+                            break
+            
+            avg_score = total_score / simulations_run if simulations_run > 0 else 0
+            move_scores_r3.append((move, avg_score, simulations_run))
+        
+        if move_scores_r3:
+            return max(move_scores_r3, key=lambda x: x[1])[1]
+        elif move_scores_r2:
+            return max(move_scores_r2, key=lambda x: x[1])[1]
+        else:
+            return max(move_scores, key=lambda x: x[1])[1]
 
 class MCTSDomainAgent:
     def __init__(self, iterations=DEFAULT_MCTS_DOMAIN_ITERATIONS, tournament_params=None):
-        self.iterations = iterations
-        self.c = 1.41
-        self.pb_c = 0.1
-        self.domain_knowledge = evaluate
-        self.heuristic_scale = 5.0
-        self.evaluation_scale = 2.0
-
-        self.tournament_params = tournament_params or {
-            'round1': {'simulations': iterations, 'keep_top': 5},
-            'round2': {'simulations': int(iterations * 1.5), 'keep_top': 3},
-            'round3': {'simulations': iterations * 2}
-        }
+        self.iterations_per_round = iterations * 6 // 10
+        tournament_total = iterations * 4 // 10
         
-        self.heavy_playout_threshold = 0.7
-        self.heavy_playout_depth = 50
-        
-        self.root = None
-        self.previous_states = []
-        self.max_tree_depth = 50
-
-    def ucb1(self, node, parent_visits):
-        if node.visits == 0:
-            return float('inf')
-        
-        pb_bonus = self.pb_c * node.heuristic_score / (node.visits + 1)
-        
-        exploitation = node.value / node.visits
-        
-        exploration = self.c * np.sqrt(np.log(parent_visits) / node.visits)
-        
-        return exploitation + exploration + pb_bonus
-
-    def select(self, node):
-        while node.untried_moves == [] and node.children:
-            node = max(node.children, key=lambda c: self.ucb1(c, node.visits))
-        return node
-
-    def expand(self, node):
-        if node.untried_moves:
-            move = node.untried_moves.pop(0)
-            new_state = node.state.copy()
-            new_state.make_move(move)
-            child = MCTSNode(new_state, parent=node, move=move)
-            
-            try:
-                raw_heuristic = heuristic(move, node.state, node.state.current_player)
-                child.heuristic_score = sigmoid(raw_heuristic, self.heuristic_scale)
-            except (TypeError, ValueError):
-                child.heuristic_score = self.domain_knowledge(child.state, node.state.current_player)
-            
-            node.children.append(child)
-            return child
-        return node
-
-    def find_reusable_subtree(self, target_state):
-        """Find a reusable subtree in the MCTS tree that matches the target state."""
-        if not self.root:
-            return None
-        
-        queue = [self.root]
-        visited = set()
-        
-        while queue:
-            node = queue.pop(0)
-            
-            if id(node) in visited:
-                continue
-            visited.add(id(node))
-            
-            if node.state_equals(target_state):
-                node.parent = None
-                return node
-            
-            if len(visited) < 100:
-                queue.extend(node.children)
-        
-        return None
-
-    def prune_tree(self, node, max_depth=None):
-        """Prune the MCTS tree if it exceeds max_tree_size."""
-        if max_depth is None:
-            max_depth = self.max_tree_depth
-        
-        def _prune_recursive(current_node, depth):
-            if depth >= max_depth:
-                current_node.children = []
-                return
-            
-            if current_node.children:
-                current_node.children.sort(key=lambda c: c.visits, reverse=True)
-                keep_count = min(len(current_node.children), 10)
-                current_node.children = current_node.children[:keep_count]
-                
-                for child in current_node.children:
-                    _prune_recursive(child, depth + 1)
-        
-        _prune_recursive(node, 0)
-
-    def heavy_playout(self, state):
-        """Heavy playout with heuristic-based move selection"""
-        sim_state = state.copy()
-        original_player = state.current_player
-        depth = 0
-        
-        while not sim_state.is_game_over() and depth < self.heavy_playout_depth:
-            moves = sim_state.get_legal_moves()
-            if not moves:
-                break
-                
-            moves_list = list(moves) if not isinstance(moves, list) else moves
-            
-            if np.random.random() < self.heavy_playout_threshold and len(moves_list) > 1:
-                try:
-                    scores = [heuristic(move, sim_state, sim_state.current_player) for move in moves_list]
-                    sigmoid_scores = [sigmoid(score, self.heuristic_scale) for score in scores]
-                    
-                    exp_scores = np.exp(np.array(sigmoid_scores) * 2)  
-                    probs = exp_scores / np.sum(exp_scores)
-                    move_idx = np.random.choice(len(moves_list), p=probs)
-                    move = moves_list[move_idx]
-                except (TypeError, ValueError, IndexError):
-                    move = moves_list[np.random.randint(len(moves_list))]
-            else:
-                move = moves_list[np.random.randint(len(moves_list))]
-                
-            sim_state.make_move(move)
-            depth += 1
-            
-        return self.domain_knowledge(sim_state, original_player)
-
-    def tournament_round(self, node, simulations, keep_top=None):
-        while node.untried_moves:
-            self.expand(node)
-            
-        for child in node.children:
-            sims_per_child = simulations // len(node.children) if node.children else simulations
-            for _ in range(sims_per_child):
-                result = self.heavy_playout(child.state)
-                self.backpropagate(child, result, node.state.current_player)
-                
-        if keep_top is not None and len(node.children) > keep_top:
-            return sorted(node.children, key=lambda c: c.visits, reverse=True)[:keep_top]
-        return node.children
-
-    def backpropagate(self, node, result, root_player):
-        """Backpropagation với result từ evaluate() [0,1]"""
-        while node:
-            node.visits += 1
-            
-            if node.state.current_player == root_player:
-                node.value += result
-            else:
-                node.value += (1.0 - result)
-            
-            node = node.parent
-
-    def update_game_history(self, state):
-        """Cập nhật lịch sử game để track states"""
-        self.previous_states.append(state.copy())
-        if len(self.previous_states) > 20:
-            self.previous_states.pop(0)
+        self.tournament_params = tournament_params if tournament_params else [
+            {'num_sim': tournament_total // 4, 'top_k': 5},      
+            {'num_sim': tournament_total // 3, 'top_k': 3},      
+            {'num_sim': tournament_total * 5 // 12, 'top_k': 1}  
+        ]
 
     def get_move(self, state):
-        if not state.get_legal_moves():
-            return None
-        
-        self.update_game_history(state)
-        
-        reused_root = self.find_reusable_subtree(state)
-        
-        if reused_root:
-            print(f"🌲 Reusing tree with {reused_root.visits} visits")
-            root = reused_root
-            self.prune_tree(root)
-        else:
-            print("🌱 Creating new tree")
-            root = MCTSNode(state)
-        
+        root = MCTSDomainNode(state)
         root_player = state.current_player
-        params = self.tournament_params
         
-        candidates = self.tournament_round(root, params['round1']['simulations'])
+        best_move_history = []
+        convergence_threshold = 5 
         
-        if len(candidates) > params['round1']['keep_top']:
-            top_candidates = sorted(candidates, key=lambda c: c.visits, reverse=True)[:params['round1']['keep_top']]
-            for candidate in top_candidates:
-                sims_per_candidate = params['round2']['simulations'] // len(top_candidates)
-                for _ in range(sims_per_candidate):
-                    result = self.heavy_playout(candidate.state)
-                    self.backpropagate(candidate, result, root_player)
-            candidates = top_candidates
-        
-        if len(candidates) > params['round2']['keep_top']:
-            top_candidates = sorted(candidates, key=lambda c: c.visits, reverse=True)[:params['round2']['keep_top']]
-            for candidate in top_candidates:
-                sims_per_candidate = params['round3']['simulations'] // len(top_candidates)
-                for _ in range(sims_per_candidate):
-                    result = self.heavy_playout(candidate.state)
-                    self.backpropagate(candidate, result, root_player)
-            candidates = top_candidates
-        
-        if not candidates:
+        for iteration in range(self.iterations_per_round):
+            node = root
+            
+            if node.untried_moves:
+                node = node.expand()
+            
+            result = node.tournament_rollout(root_player, self.tournament_params)
+            node.backpropagate(result, root_player)
+            
+            if iteration >= 10:  
+                current_best = max(root.children, 
+                                key=lambda c: c.wins / c.visits if c.visits > 0 else 0)
+                best_move_history.append(current_best.move)
+                
+                if len(best_move_history) > convergence_threshold:
+                    best_move_history.pop(0)
+                
+                if len(best_move_history) == convergence_threshold:
+                    if all(move == best_move_history[0] for move in best_move_history):
+                        confidence = current_best.wins / current_best.visits
+                        if confidence > 0.7: 
+                            break
+                
+                if len(root.children) > 1:
+                    sorted_children = sorted(root.children, 
+                                        key=lambda c: c.wins / c.visits if c.visits > 0 else 0, 
+                                        reverse=True)
+                    if len(sorted_children) >= 2:
+                        best_rate = sorted_children[0].wins / sorted_children[0].visits if sorted_children[0].visits > 0 else 0
+                        second_rate = sorted_children[1].wins / sorted_children[1].visits if sorted_children[1].visits > 0 else 0
+                        
+                        if (best_rate - second_rate > 0.3 and 
+                            sorted_children[0].visits > 20 and 
+                            iteration > 15):
+                            break
+
+        if not root.children:
             return None
-        
-        best_child = max(candidates, key=lambda c: c.value / c.visits if c.visits > 0 else 0)
-        
-        self.root = best_child
-        self.root.parent = None
-        
-        win_rate = best_child.value / best_child.visits if best_child.visits > 0 else 0
-        print(f"🎯 Selected move with {best_child.visits} visits, win rate: {win_rate:.3f}")
-        
-        return best_child.move
-
-    def reset_tree(self):
-        """Reset tree manually if needed"""
-        self.root = None
-        self.previous_states = []
-        print("🗑️ Tree reset")
-
-    def get_tree_stats(self):
-        """Get statistics about current tree"""
-        if not self.root:
-            return {"nodes": 0, "depth": 0, "total_visits": 0, "win_rate": 0}
-        
-        def count_nodes(node, depth=0):
-            count = 1
-            max_depth = depth
-            total_visits = node.visits
-            
-            for child in node.children:
-                child_count, child_depth, child_visits = count_nodes(child, depth + 1)
-                count += child_count
-                max_depth = max(max_depth, child_depth)
-                total_visits += child_visits
-            
-            return count, max_depth, total_visits
-        
-        nodes, depth, visits = count_nodes(self.root)
-        root_win_rate = self.root.value / self.root.visits if self.root.visits > 0 else 0
-        
-        return {
-            "nodes": nodes,
-            "depth": depth, 
-            "total_visits": visits,
-            "root_visits": self.root.visits,
-            "root_win_rate": root_win_rate
-        }
+        return max(root.children, key=lambda c: c.wins / c.visits if c.visits > 0 else 0).move

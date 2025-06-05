@@ -66,8 +66,8 @@ class AtaxxGame:
             raise ValueError("Display must be 'pygame' or 'terminal'")
         self.agents = {
             "Minimax+AB": MinimaxAgent(max_depth=4),
-            "MCTS_300": MCTSAgent(iterations=self.iterations),
-            "MCTS_Domain_300": MCTSDomainAgent(iterations=self.iterations),
+            "MCTS_300": MCTSAgent(iterations=iterations),
+            "MCTS_Domain_300": MCTSDomainAgent(iterations=iterations),
             "MCTS_Domain_600": MCTSDomainAgent(iterations=max(self.iterations, 600)),
             "AB+MCTS_Domain_600": ABMCTSDomainAgent(iterations=max(self.iterations, 600), ab_depth=4)
         }
@@ -211,7 +211,7 @@ class AtaxxGame:
             return
         while self.menu_active and self.running:
             buttons = self.draw_menu()
-            map_prev, map_next, games_prev, games_next, algo1_prev, algo1_next, algo2_prev, algo2_next, \
+            games_prev, games_next, algo1_prev, algo1_next, algo2_prev, algo2_next, \
             first_player_prev, first_player_next, start_button = buttons
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -331,27 +331,82 @@ class AtaxxGame:
 
     def save_results(self):
         data = []
-        map_name = self.map_file or f"Map_{self.map_idx + 1}"
+        map_name = self.map_file or "Default_Map"
+        timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         for name in self.results:
             if self.results[name]["games_played"] > 0:
+                avg_pieces = self.results[name]['avg_pieces'] / self.results[name]['games_played']
                 data.append({
+                    'Timestamp': timestamp,
                     'Agent': name,
                     'Wins': self.results[name]['wins'],
                     'Losses': self.results[name]['losses'],
                     'Draws': self.results[name]['draws'],
-                    'AvgPieces': self.results[name]['avg_pieces'],
+                    'AvgPieces': round(avg_pieces, 2),
                     'TotalGames': self.results[name]['games_played'],
-                    'Map': map_name
+                    'Map': map_name,
+                    'Opponent': self.algo2 if name == self.algo1 else self.algo1,
+                    'MatchID': f"{self.algo1}_vs_{self.algo2}_{timestamp.replace(':', '-').replace(' ', '_')}"
                 })
-        df = pd.DataFrame(data)
+        
+        new_df = pd.DataFrame(data)
         output_path = '/kaggle/working/results.csv' if os.path.exists('/kaggle/working') else 'results.csv'
+        
         if platform.system() == "Emscripten":
             print("Pyodide: Cannot save CSV. Results:")
-            print(df.to_string(index=False))
-        else:
-            df.to_csv(output_path, index=False)
-            print(f"Saved results to {output_path}")
-        return df
+            print(new_df.to_string(index=False))
+            return new_df
+        
+        try:
+            # ✅ TRY TO READ EXISTING CSV
+            if os.path.exists(output_path):
+                print(f"📖 Reading existing results from {output_path}")
+                existing_df = pd.read_csv(output_path)
+                
+                # Combine existing and new data
+                combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+                print(f"📊 Added {len(new_df)} new records to existing {len(existing_df)} records")
+            else:
+                print(f"📝 Creating new results file {output_path}")
+                combined_df = new_df
+            
+            # ✅ SAVE COMBINED RESULTS
+            combined_df.to_csv(output_path, index=False)
+            print(f"💾 Saved {len(combined_df)} total records to {output_path}")
+            
+            # ✅ DISPLAY SUMMARY OF LATEST MATCH
+            print(f"\n📈 Latest Match Results:")
+            for _, row in new_df.iterrows():
+                win_rate = (row['Wins'] / row['TotalGames'] * 100) if row['TotalGames'] > 0 else 0
+                print(f"  {row['Agent']}: {row['Wins']}W-{row['Losses']}L-{row['Draws']}D "
+                    f"({win_rate:.1f}% win rate, {row['AvgPieces']} avg pieces)")
+            
+            # ✅ DISPLAY HISTORICAL SUMMARY (if multiple matches)
+            if len(combined_df) > len(new_df):
+                print(f"\n📊 Historical Summary (All Matches):")
+                historical_summary = combined_df.groupby('Agent').agg({
+                    'Wins': 'sum',
+                    'Losses': 'sum', 
+                    'Draws': 'sum',
+                    'TotalGames': 'sum',
+                    'AvgPieces': 'mean'
+                }).round(2)
+                
+                for agent, stats in historical_summary.iterrows():
+                    total_games = stats['TotalGames']
+                    win_rate = (stats['Wins'] / total_games * 100) if total_games > 0 else 0
+                    print(f"  {agent}: {int(stats['Wins'])}W-{int(stats['Losses'])}L-{int(stats['Draws'])}D "
+                        f"({win_rate:.1f}% win rate, {stats['AvgPieces']:.2f} avg pieces, {int(total_games)} total games)")
+            
+            return combined_df
+            
+        except Exception as e:
+            print(f"❌ Error saving results: {e}")
+            # Fallback: print results to console
+            print("Fallback - Results printed to console:")
+            print(new_df.to_string(index=False))
+            return new_df
 
     async def run_tournament(self):
         await self.run_menu()

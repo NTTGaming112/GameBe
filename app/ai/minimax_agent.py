@@ -6,35 +6,31 @@ class MinimaxAgent:
     def __init__(self, max_depth=DEFAULT_MINIMAX_DEPTH, time_limit=None):
         self.max_depth = max_depth
         self.time_limit = time_limit
-
-    def get_ordered_moves(self, state):
+        self.root_player = None
+    
+    def ordering_moves(self, state):
         moves = state.get_legal_moves()
-        if not moves:
-            return []
-        move_scores = []
+        scored_moves = []
         for move in moves:
-            r, c, nr, nc = move
-            score = 0
-            for dr in [-1, 0, 1]:
-                for dc in [-1, 0, 1]:
-                    if dr == 0 and dc == 0:
-                        continue
-                    nnr, nnc = nr + dr, nc + dc
-                    if (0 <= nnr < BOARD_SIZE and 0 <= nnc < BOARD_SIZE and
-                            state.board[nnr][nnc] == -state.current_player):
-                        score += 1
-            move_scores.append((move, score))
-        move_scores.sort(key=lambda x: x[1], reverse=True)
-        return [move for move, _ in move_scores]
+            new_state = state.copy()
+            taken = new_state.make_move(move)  
+            if taken is None:
+                taken = new_state.count_stones(-state.current_player) - state.count_stones(-state.current_player)
+            scored_moves.append((taken, move))
+        scored_moves.sort(reverse=True, key=lambda x: x[0])
+        return [move for _, move in scored_moves]
 
     def minimax(self, state, depth, alpha, beta, maximizingPlayer, max_depth):
         if depth >= max_depth or state.is_game_over():
-            return evaluate(state, 1), None
-        
-        moves = self.get_ordered_moves(state)
+            
+            return evaluate(state, self.root_player), None
+
+        moves = self.ordering_moves(state)
         if not moves:
-            return evaluate(state, 1), None
-        
+            new_state = state.copy()
+            new_state.current_player = -new_state.current_player
+            return self.minimax(new_state, depth + 1, alpha, beta, not maximizingPlayer, max_depth)
+
         if maximizingPlayer:
             maxEval = float('-inf')
             best_move = None
@@ -49,7 +45,6 @@ class MinimaxAgent:
                 if beta <= alpha:
                     break
             return maxEval, best_move
-        
         else:
             minEval = float('inf')
             best_move = None
@@ -69,6 +64,7 @@ class MinimaxAgent:
         if not state.get_legal_moves():
             return None
         
+        self.root_player = state.current_player
         start_time = time.time()
         best_move = None
         for depth in range(1, self.max_depth + 1):
