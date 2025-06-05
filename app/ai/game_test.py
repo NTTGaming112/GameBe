@@ -631,46 +631,6 @@ class AtaxxGame:
                     elif 'first_player_next' in buttons and buttons['first_player_next'].collidepoint(pos):
                         self.first_player = -1 if self.first_player == 1 else 1
                     elif 'start_button' in buttons and buttons['start_button'].collidepoint(pos):
-                        self.games_per_match = self.selected_games
-                        self.algo1 = self.selected_algo1
-                        self.algo2 = self.selected_algo2
-                        self.results = {name: {"wins": 0, "losses": 0, "draws": 0, "avg_pieces": 0, "games_played": 0} 
-                                      for name in [self.algo1, self.algo2]}
-                        self.menu_active = False
-                        
-            await asyncio.sleep(0.016)
-
-                    if 'maps_prev' in buttons and buttons['maps_prev'].collidepoint(pos):
-                        if self.available_maps:
-                            current_idx = self.available_maps.index(self.map_file) if self.map_file in self.available_maps else 0
-                            self.map_file = self.available_maps[(current_idx - 1) % len(self.available_maps)]
-                            self.initial_board = read_map_file(self.map_file)
-                    elif 'maps_next' in buttons and buttons['maps_next'].collidepoint(pos):
-                        if self.available_maps:
-                            current_idx = self.available_maps.index(self.map_file) if self.map_file in self.available_maps else 0
-                            self.map_file = self.available_maps[(current_idx + 1) % len(self.available_maps)]
-                            self.initial_board = read_map_file(self.map_file)
-                    elif 'games_prev' in buttons and buttons['games_prev'].collidepoint(pos):
-                        self.selected_games = max(1, self.selected_games - 1)
-                    elif 'games_next' in buttons and buttons['games_next'].collidepoint(pos):
-                        self.selected_games = min(10, self.selected_games + 1)
-                    elif 'algo1_prev' in buttons and buttons['algo1_prev'].collidepoint(pos):
-                        idx = self.agent_names.index(self.selected_algo1)
-                        self.selected_algo1 = self.agent_names[(idx - 1) % len(self.agent_names)]
-                    elif 'algo1_next' in buttons and buttons['algo1_next'].collidepoint(pos):
-                        idx = self.agent_names.index(self.selected_algo1)
-                        self.selected_algo1 = self.agent_names[(idx + 1) % len(self.agent_names)]
-                    elif 'algo2_prev' in buttons and buttons['algo2_prev'].collidepoint(pos):
-                        idx = self.agent_names.index(self.selected_algo2)
-                        self.selected_algo2 = self.agent_names[(idx - 1) % len(self.agent_names)]
-                    elif 'algo2_next' in buttons and buttons['algo2_next'].collidepoint(pos):
-                        idx = self.agent_names.index(self.selected_algo2)
-                        self.selected_algo2 = self.agent_names[(idx + 1) % len(self.agent_names)]
-                    elif 'first_player_prev' in buttons and buttons['first_player_prev'].collidepoint(pos):
-                        self.first_player = 1 if self.first_player == -1 else -1
-                    elif 'first_player_next' in buttons and buttons['first_player_next'].collidepoint(pos):
-                        self.first_player = -1 if self.first_player == 1 else 1
-                    elif 'start_button' in buttons and buttons['start_button'].collidepoint(pos):
                         self.menu_active = False
                         self.games_per_match = self.selected_games
                         self.algo1 = self.selected_algo1
