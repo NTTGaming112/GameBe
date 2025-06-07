@@ -9,157 +9,138 @@ class MCTSDomainNode(MCTSNode):
     def __init__(self, state, parent=None, move=None):
         super().__init__(state, parent, move)
 
-    def expand(self):
+    def heuristic_expand(self): 
         if not self.untried_moves:
             return None
-        
-        scored_moves = [(move, heuristic(move, self.state, self.state.current_player)) 
-                    for move in self.untried_moves]
-        scored_moves.sort(key=lambda x: x[1], reverse=True)
-        
-        threshold = scored_moves[0][1] * 0.7
-        good_moves = [move for move, score in scored_moves if score >= threshold]
-        
-        if good_moves:
-            move = good_moves[0]  
-        else:
-            move = random.choice(self.untried_moves) 
-        
+
+        scored_moves = [(m, heuristic(m, self.state, self.state.current_player)) for m in self.untried_moves]
+        probabilities = self.softmax([score for _, score in scored_moves], temperature=0.8)
+        move = random.choices([m for m, _ in scored_moves], weights=probabilities)[0]
         self.untried_moves.remove(move)
         next_state = self.state.copy()
         next_state.make_move(move)
         child = MCTSDomainNode(state=next_state, parent=self, move=move)
         self.children.append(child)
+
         return child
+    
+    
+    def heuristic_rollout(self, root_player):
+        sim_state = self.state.copy()
+        while not sim_state.is_game_over():
+            moves = sim_state.get_legal_moves()
+            if not moves:
+                sim_state.current_player = -sim_state.current_player
+                continue
+
+            scored_moves = [(m, heuristic(m, sim_state, sim_state.current_player)) for m in moves]
+            scores = [s for _, s in scored_moves]
+            probs = self.softmax(scores, temperature=0.4)
+            move = random.choices([m for m, _ in scored_moves], weights=probs)[0]
+            sim_state.make_move(move)
+
+        return evaluate(sim_state, root_player)
+
+    
+    def softmax(self, scores, temperature=1.0):
+        scores = np.array(scores)
+        scores = scores - np.max(scores)  
+        exp_scores = np.exp(scores / temperature)
+        sum_exp = np.sum(exp_scores)
+        if sum_exp == 0:  
+            return np.ones_like(scores) / len(scores) 
+        return exp_scores / sum_exp
 
     def tournament_rollout(self, root_player, tournament_params):
         moves = self.state.get_legal_moves()
         if not moves:
             return evaluate(self.state, root_player)
         
-        move_scores = []
-        best_score_so_far = float('-inf')
+        scores = [heuristic(move, self.state, self.state.current_player) for move in moves]
+        threshold_r1 = 0.4 if len(moves) > 10 else 0.2
+        max_idx = np.argmax(scores)
+        if len(moves) > 1 and scores[max_idx] - sorted(scores)[-2] > threshold_r1:
+            return scores[max_idx]
         
-        for move in moves:
-            total_score = 0
-            simulations_run = 0
-            
-            for sim_idx in range(tournament_params[0]['num_sim']):
-                sim_state = self.state.copy()
-                sim_state.make_move(move)
-                
-                while not sim_state.is_game_over():
-                    legal_moves = sim_state.get_legal_moves()
-                    if not legal_moves:
-                        sim_state.current_player = -sim_state.current_player
-                        continue
-                    
-                    scored_moves = [(m, heuristic(m, sim_state, sim_state.current_player)) 
-                                for m in legal_moves]
-                    scored_moves.sort(key=lambda x: x[1], reverse=True)
-                    best_move = scored_moves[0][0]
-                    sim_state.make_move(best_move)
-                
-                total_score += evaluate(sim_state, root_player)
-                simulations_run += 1
-                
-                if sim_idx >= 5:
-                    current_avg = total_score / simulations_run
-                    
-                    if current_avg < best_score_so_far - 0.3 and sim_idx >= 10:
-                        break
-                    
-                    if current_avg > best_score_so_far + 0.2 and sim_idx >= 15:
-                        break
-            
-            avg_score = total_score / simulations_run if simulations_run > 0 else 0
-            move_scores.append((move, avg_score, simulations_run))
-            best_score_so_far = max(best_score_so_far, avg_score)
-        
-        move_scores.sort(key=lambda x: x[1], reverse=True)
-        
-        if len(move_scores) > 1 and move_scores[0][1] - move_scores[1][1] > 0.4:
-            return move_scores[0][1]  
-        
-        top_moves_r1 = [move for move, _, _ in move_scores[:tournament_params[0]['top_k']]]
+        top_k = min(tournament_params[0]['top_k'], len(moves))
+        probs = self.softmax(scores, temperature=0.8) 
+        top_indices = np.random.choice(len(moves), size=top_k, p=probs, replace=False)
+        top_moves_r1 = [moves[i] for i in top_indices]
         
         move_scores_r2 = []
+        sim_state = self.state.copy()  
         for i, move in enumerate(top_moves_r1):
             adaptive_sims = tournament_params[1]['num_sim'] + (len(top_moves_r1) - i - 1) * 10
-            
             total_score = 0
             simulations_run = 0
+            scores_list = []
             
             for sim_idx in range(adaptive_sims):
-                sim_state = self.state.copy()
-                sim_state.make_move(move)
+                sim_state_copy = sim_state.copy()
+                sim_state_copy.make_move(move)
                 
-                while not sim_state.is_game_over():
-                    legal_moves = sim_state.get_legal_moves()
+                while not sim_state_copy.is_game_over():
+                    legal_moves = sim_state_copy.get_legal_moves()
                     if not legal_moves:
-                        sim_state.current_player = -sim_state.current_player
+                        sim_state_copy.current_player = -sim_state_copy.current_player
                         continue
-                    
-                    scored_moves = [(m, heuristic(m, sim_state, sim_state.current_player)) 
-                                for m in legal_moves]
-                    scored_moves.sort(key=lambda x: x[1], reverse=True)
-                    best_move = scored_moves[0][0]
-                    sim_state.make_move(best_move)
+                    scores = [heuristic(m, sim_state_copy, sim_state_copy.current_player) for m in legal_moves]
+                    probs = self.softmax(scores, temperature=0.3)  
+                    best_move = legal_moves[np.random.choice(len(legal_moves), p=probs)]
+                    sim_state_copy.make_move(best_move)
                 
-                total_score += evaluate(sim_state, root_player)
+                score = evaluate(sim_state_copy, root_player)
+                total_score += score
+                scores_list.append(score)
                 simulations_run += 1
                 
-                if sim_idx >= 8:
+                if sim_idx >= 8 and len(scores_list) > 1:
                     current_avg = total_score / simulations_run
-                    if sim_idx >= 20 and abs(current_avg - (total_score - evaluate(sim_state, root_player)) / (simulations_run - 1)) < 0.05:
+                    prev_avg = (total_score - score) / (simulations_run - 1) if simulations_run > 1 else current_avg
+                    if sim_idx >= 20 and abs(current_avg - prev_avg) < 0.05:
                         break
             
             avg_score = total_score / simulations_run if simulations_run > 0 else 0
             move_scores_r2.append((move, avg_score, simulations_run))
         
         move_scores_r2.sort(key=lambda x: x[1], reverse=True)
-        
         if len(move_scores_r2) > 1 and move_scores_r2[0][1] - move_scores_r2[1][1] > 0.3:
             return move_scores_r2[0][1]
         
-        top_moves_r2 = [move for move, _, _ in move_scores_r2[:tournament_params[1]['top_k']]]
-        
+        top_k_r2 = min(tournament_params[1]['top_k'], len(move_scores_r2))
+        top_moves_r2 = [move for move, _, _ in move_scores_r2[:top_k_r2]]
         move_scores_r3 = []
+        
         for move in top_moves_r2:
             total_score = 0
             simulations_run = 0
-            variance_sum = 0
-            scores = []
+            scores_list = []
+            sim_state = self.state.copy()
             
             for sim_idx in range(tournament_params[2]['num_sim']):
-                sim_state = self.state.copy()
-                sim_state.make_move(move)
+                sim_state_copy = sim_state.copy()
+                sim_state_copy.make_move(move)
                 
-                while not sim_state.is_game_over():
-                    legal_moves = sim_state.get_legal_moves()
+                while not sim_state_copy.is_game_over():
+                    legal_moves = sim_state_copy.get_legal_moves()
                     if not legal_moves:
-                        sim_state.current_player = -sim_state.current_player
+                        sim_state_copy.current_player = -sim_state_copy.current_player
                         continue
-                    
-                    scored_moves = [(m, heuristic(m, sim_state, sim_state.current_player)) 
-                                for m in legal_moves]
-                    scored_moves.sort(key=lambda x: x[1], reverse=True)
-                    best_move = scored_moves[0][0]
-                    sim_state.make_move(best_move)
+                    scores = [heuristic(m, sim_state_copy, sim_state_copy.current_player) for m in legal_moves]
+                    probs = self.softmax(scores, temperature=0.3) 
+                    best_move = legal_moves[np.random.choice(len(legal_moves), p=probs)]
+                    sim_state_copy.make_move(best_move)
                 
-                score = evaluate(sim_state, root_player)
+                score = evaluate(sim_state_copy, root_player)
                 total_score += score
-                scores.append(score)
+                scores_list.append(score)
                 simulations_run += 1
                 
-                if sim_idx >= 15:
-                    current_avg = total_score / simulations_run
-                    if len(scores) > 1:
-                        variance = np.var(scores)
-                        std_error = math.sqrt(variance / len(scores))
-                        
-                        if std_error < 0.1: 
-                            break
+                if sim_idx >= 15 and len(scores_list) > 1:
+                    variance = np.var(scores_list)
+                    std_error = math.sqrt(variance / len(scores_list))
+                    if std_error < 0.1:
+                        break
             
             avg_score = total_score / simulations_run if simulations_run > 0 else 0
             move_scores_r3.append((move, avg_score, simulations_run))
@@ -169,11 +150,11 @@ class MCTSDomainNode(MCTSNode):
         elif move_scores_r2:
             return max(move_scores_r2, key=lambda x: x[1])[1]
         else:
-            return max(move_scores, key=lambda x: x[1])[1]
+            return max(scores)
 
 class MCTSDomainAgent:
-    def __init__(self, iterations=DEFAULT_MCTS_DOMAIN_ITERATIONS, tournament_params=None):
-        self.iterations_per_round = iterations * 6 // 10
+    def __init__(self, iterations=DEFAULT_MCTS_DOMAIN_ITERATIONS, tournament_params=None, tournament=False):
+        self.iterations_per_round = iterations * 6 // 10 if tournament else iterations
         tournament_total = iterations * 4 // 10
         
         self.tournament_params = tournament_params if tournament_params else [
@@ -181,6 +162,7 @@ class MCTSDomainAgent:
             {'num_sim': tournament_total // 3, 'top_k': 3},      
             {'num_sim': tournament_total * 5 // 12, 'top_k': 1}  
         ]
+        self.tournament = tournament
 
     def get_move(self, state):
         root = MCTSDomainNode(state)
@@ -193,9 +175,13 @@ class MCTSDomainAgent:
             node = root
             
             if node.untried_moves:
-                node = node.expand()
-            
-            result = node.tournament_rollout(root_player, self.tournament_params)
+                node = node.heuristic_expand()
+
+            if self.tournament:
+                result = node.tournament_rollout(root_player, self.tournament_params)
+            else:
+                result = node.heuristic_rollout(root_player)
+
             node.backpropagate(result, root_player)
             
             if iteration >= 10:  

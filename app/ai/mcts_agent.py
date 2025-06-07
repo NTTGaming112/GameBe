@@ -46,14 +46,13 @@ class MCTSNode:
         return evaluate(sim_state, root_player)
 
     def backpropagate(self, result, root_player):
-        self.visits += 1
-        if result == root_player:
-            self.wins += 1
-        elif result == -root_player:
-            self.wins -= 1
-
-        if self.parent is not None:
-            self.parent.backpropagate(result, root_player)
+        while self is not None:
+            self.visits += 1
+            if self.node_player == root_player:
+                self.wins += result
+            else:
+                self.wins -= result
+            self = self.parent
 
 class MCTSAgent:
     def __init__(self, iterations=DEFAULT_MCTS_ITERATIONS):

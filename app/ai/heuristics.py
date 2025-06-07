@@ -1,5 +1,5 @@
 import numpy as np
-from constants import BOARD_SIZE, EMPTY, PLAYER_1, PLAYER_2, S1, S2, S3, S4
+from constants import ALPHA, BETA, BOARD_SIZE, EMPTY, PLAYER_1, PLAYER_2, S1, S2, S3, S4
 
 def heuristic(move, state, player):
     r, c, nr, nc = move
@@ -35,37 +35,23 @@ def heuristic(move, state, player):
     return S1 * captured + S2 * allies + S3 * bonus_clone - S4 * penalty_jump
 
 def evaluate(state, player):
+    # own = np.sum(state.board == player)
+    # opp = np.sum(state.board == -player)
+    # diff = own / (own + opp)
+    # score = ALPHA + BETA * diff
+    # return score
     if state.is_game_over():
-        winner = state.get_winner()
-        if winner == player:
+        if state.current_player == player:
             return 1.0
-        elif winner == -player:
-            return 0.0
+        elif state.current_player == -player:
+            return 0
         else:
             return 0.5
-
+        
     own = np.sum(state.board == player)
     opp = np.sum(state.board == -player)
+    score = own / (own + opp) if (own + opp) > 0 else 0.5
+    return score
 
-    return (own - opp)/(own + opp + 1e-6)
-    
-        
-    # owner_score = np.sum(state.board == player)
-    # opponent_score = np.sum(state.board == -player)
-    # ep = owner_score - opponent_score
 
-    # if state.is_game_over():
-    #     winner = state.get_winner()
-    #     if winner == player:
-    #         if state.board_full():
-    #             ep += 50
-    #         else:
-    #             ep += 500
 
-    #     elif winner == -player:
-    #         if state.board_full():
-    #             ep -= 50
-    #         else:
-    #             ep -= 500
-
-    # return (ep + 549) / 1098

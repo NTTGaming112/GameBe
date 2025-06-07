@@ -33,7 +33,7 @@ COLORS = {
 
 CELL_SIZE = 70
 BOARD_SIZE = 7
-PANEL_WIDTH = 320
+PANEL_WIDTH = 400
 WINDOW_WIDTH = BOARD_SIZE * CELL_SIZE + PANEL_WIDTH + 40
 WINDOW_HEIGHT = max(BOARD_SIZE * CELL_SIZE + 100, 600)
 
@@ -712,8 +712,6 @@ class AtaxxGame:
                 o_pieces = np.sum(self.state.board == -1)
                 print(f"Pieces - X: {x_pieces}, O: {o_pieces}")
                 control_buttons = self.draw_board()
-                
-                await asyncio.sleep(2.0)
                 
                 if self.display == 'pygame':
                     sleep_time = max(0.1, self.delay)
