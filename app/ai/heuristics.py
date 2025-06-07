@@ -1,5 +1,5 @@
 import numpy as np
-from constants import BOARD_SIZE, S1, S2, S3, S4, ALPHA, BETA
+from constants import ALPHA, BETA, BOARD_SIZE, EMPTY, PLAYER_1, PLAYER_2, S1, S2, S3, S4
 
 def heuristic(move, state, player):
     r, c, nr, nc = move
@@ -35,36 +35,23 @@ def heuristic(move, state, player):
     return S1 * captured + S2 * allies + S3 * bonus_clone - S4 * penalty_jump
 
 def evaluate(state, player):
+    # own = np.sum(state.board == player)
+    # opp = np.sum(state.board == -player)
+    # diff = own / (own + opp)
+    # score = ALPHA + BETA * diff
+    # return score
+    if state.is_game_over():
+        if state.current_player == player:
+            return 1.0
+        elif state.current_player == -player:
+            return 0
+        else:
+            return 0.5
+        
     own = np.sum(state.board == player)
     opp = np.sum(state.board == -player)
-    total_pieces = own + opp
-    piece_diff = own - opp
-    max_diff = 49  
+    score = own / (own + opp) if (own + opp) > 0 else 0.5
+    return score
 
-    if total_pieces > 0:
-        piece_ratio = own / total_pieces  
-    else:
-        piece_ratio = 0.5  
-    normalized_diff = piece_diff / max_diff  
-    f_i = sigmoid(normalized_diff, scale=1.0)  
 
-    if state.is_game_over():
-        winner = state.get_winner()
-        if winner == player:
-            b_i = 1.0  
-        elif winner == -player:
-            b_i = 0.0  
-        else:
-            b_i = 0.5  
-    else:
-        b_i = piece_ratio
 
-    w_i = b_i * (ALPHA + BETA * f_i)
-
-    w_i = max(0.0, min(1.0, w_i))
-
-    return w_i
-
-def sigmoid(x, scale=1.0):
-    """Hàm sigmoid để chuẩn hóa giá trị về [0, 1]"""
-    return 1.0 / (1.0 + np.exp(-x / scale))

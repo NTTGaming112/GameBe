@@ -68,7 +68,7 @@ class AtaxxState:
         self.current_player = -self.current_player
 
     def is_game_over(self):
-        return np.sum(self.board == EMPTY) == 0
+        return np.sum(self.board == EMPTY) == 0 or self.get_player_cells(PLAYER_1) == 0 or self.get_player_cells(PLAYER_2) == 0
 
     def get_winner(self):
         if not self.is_game_over():
@@ -84,6 +84,14 @@ class AtaxxState:
             return PLAYER_2
         
         return 0
+    
+    def board_full(self):
+        return np.sum(self.board == EMPTY) == 0
+    
+    def count_stones(self, player):
+        if player not in (PLAYER_1, PLAYER_2):
+            raise ValueError("Invalid player. Use PLAYER_1 or PLAYER_2.")
+        return np.sum(self.board == player)
     
     def get_empty_cells(self):
         return np.sum(self.board == EMPTY)
