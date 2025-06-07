@@ -33,9 +33,9 @@ COLORS = {
 
 CELL_SIZE = 70
 BOARD_SIZE = 7
-PANEL_WIDTH = 400
+PANEL_WIDTH = 800
 WINDOW_WIDTH = BOARD_SIZE * CELL_SIZE + PANEL_WIDTH + 40
-WINDOW_HEIGHT = max(BOARD_SIZE * CELL_SIZE + 100, 600)
+WINDOW_HEIGHT = max(BOARD_SIZE * CELL_SIZE + 100, 1000)
 
 MAP_FILES = {
     "position_3_3_empty_w.txt": """WWWWWWW\nBWWWWWW\nWWWBBBW\nWBBBBBW\nWBBBBBW\n#BBBBBB\n##WBBBW"""
@@ -87,7 +87,8 @@ def read_map_file(filename):
 
 class AtaxxGame:
     def __init__(self, games_per_match=5, iterations=300, algo1="MCTS_Domain_600", 
-                 algo2="Minimax+AB", display="pygame", map_file=None, delay=0.5, first_player='W'):
+             algo2="Minimax+AB", display="pygame", map_file=None, delay=0.5, first_player='W',
+             use_tournament=True, transition_threshold=13):
         self.available_maps = get_available_maps()
         self.map_file = map_file if map_file in self.available_maps else self.available_maps[0] if self.available_maps else None
         self.games_per_match = games_per_match
@@ -95,17 +96,28 @@ class AtaxxGame:
         self.delay = delay
         self.display = display.lower()
         self.first_player = 1 if first_player == 'W' else -1
+        self.use_tournament = use_tournament
+        self.transition_threshold = transition_threshold
+        
         if self.display not in ['pygame', 'terminal']:
             raise ValueError("Display must be 'pygame' or 'terminal'")
+        
         self.agents = {
             "Minimax+AB": MinimaxAgent(max_depth=4),
             "MCTS_300": MCTSAgent(iterations=iterations),
-            "MCTS_Domain_300": MCTSDomainAgent(iterations=iterations),
-            "MCTS_Domain_600": MCTSDomainAgent(iterations=max(self.iterations, 600)),
-            "AB+MCTS_Domain_600": ABMCTSDomainAgent(iterations=max(self.iterations, 600), ab_depth=4)
+            "MCTS_Domain_300": MCTSDomainAgent(iterations=iterations, tournament=self.use_tournament),
+            "MCTS_Domain_600": MCTSDomainAgent(iterations=max(self.iterations, 600), tournament=self.use_tournament),
+            "AB+MCTS_Domain_600": ABMCTSDomainAgent(
+                iterations=max(self.iterations, 600), 
+                ab_depth=4, 
+                transition_threshold=self.transition_threshold,
+                tournament=self.use_tournament
+            )
         }
+        
         if algo1 not in self.agents or algo2 not in self.agents:
             raise ValueError(f"Invalid agent(s). Choose from: {list(self.agents.keys())}")
+        
         self.algo1 = algo1
         self.algo2 = algo2
         self.results = {name: {"wins": 0, "losses": 0, "draws": 0, "avg_pieces": 0, "games_played": 0} 
@@ -120,6 +132,8 @@ class AtaxxGame:
         self.selected_games = self.games_per_match
         self.selected_algo1 = self.algo1
         self.selected_algo2 = self.algo2
+        self.selected_use_tournament = self.use_tournament
+        self.selected_transition_threshold = self.transition_threshold
         self.agent_names = list(self.agents.keys())
         self.initial_board = read_map_file(self.map_file)
         self.fullscreen = False
@@ -435,6 +449,10 @@ class AtaxxGame:
             o_pieces = np.sum(self.state.board == -1)
             current_player = "X" if self.state.current_player == 1 else "O"
             
+            # Get current player names based on game state
+            current_x_player = getattr(self, 'current_x_player', self.algo1)
+            current_o_player = getattr(self, 'current_o_player', self.algo2)
+            
             if self.map_file and self.map_file in self.available_maps:
                 map_idx = self.available_maps.index(self.map_file)
                 map_display = f"Map {map_idx}: {self.map_file.replace('.txt', '')}"
@@ -442,8 +460,8 @@ class AtaxxGame:
                 map_display = "Map 1: Default"
             
             stats_data = [
-                (f"Red {self.algo1}: {x_pieces} pieces", COLORS['player_x']),
-                (f"Blue {self.algo2}: {o_pieces} pieces", COLORS['player_o']),
+                (f"Red (X) {current_x_player}: {x_pieces} pieces", COLORS['player_x']),
+                (f"Blue (O) {current_o_player}: {o_pieces} pieces", COLORS['player_o']),
                 (f"Current Turn: Player {current_player}", COLORS['accent']),
                 (map_display, COLORS['text_dark']),
             ]
@@ -510,79 +528,353 @@ class AtaxxGame:
         return rect
     
     def draw_menu(self):
-        """Menu với thiết kế hiện đại"""
         screen_width, screen_height = self.screen.get_size()
         
-        self.draw_gradient_rect(self.screen, pygame.Rect(0, 0, screen_width, screen_height),
-                               COLORS['bg'], (COLORS['bg'][0]+15, COLORS['bg'][1]+15, COLORS['bg'][2]+15))
+        # Enhanced gradient background
+        self.draw_advanced_gradient(self.screen, pygame.Rect(0, 0, screen_width, screen_height),
+                                COLORS['bg'], (COLORS['bg'][0]+20, COLORS['bg'][1]+25, COLORS['bg'][2]+30))
         
-        title = self.font_large.render("Ataxx Tournament", True, COLORS['text'])
-        title_rect = title.get_rect(center=(screen_width//2, 60))
-        title_shadow = self.font_large.render("Ataxx Tournament", True, COLORS['text_dark'])
-        self.screen.blit(title_shadow, (title_rect.x + 3, title_rect.y + 3))
+        # Animated particles background
+        self.draw_particles_background()
+        
+        # Modern title with glow effect
+        title_font = pygame.font.SysFont('Segoe UI', 48, bold=True)
+        title = title_font.render("ATAXX", True, COLORS['text'])
+        subtitle_font = pygame.font.SysFont('Segoe UI', 24, bold=False)
+        subtitle = subtitle_font.render("Tournament", True, COLORS['accent'])
+        
+        # Title positioning with glow
+        title_rect = title.get_rect(center=(screen_width//2, 80))
+        subtitle_rect = subtitle.get_rect(center=(screen_width//2, 115))
+        
+        # Glow effect for title
+        self.draw_text_glow(self.screen, "ATAXX", title_font, COLORS['accent'], 
+                        (title_rect.x, title_rect.y), blur_radius=15)
         self.screen.blit(title, title_rect)
+        self.screen.blit(subtitle, subtitle_rect)
         
-        hint_text = "Press F11 for fullscreen, ESC to exit fullscreen"
+        # Enhanced hint with icons
+        hint_text = "🎮 F11: Fullscreen | ESC: Exit | SPACE: Pause"
         hint_surface = self.font_small.render(hint_text, True, COLORS['text'])
-        hint_rect = hint_surface.get_rect(center=(screen_width//2, 90))
+        hint_rect = hint_surface.get_rect(center=(screen_width//2, 150))
         self.screen.blit(hint_surface, hint_rect)
         
-        margin = 50
-        menu_rect = pygame.Rect(margin, 120, screen_width - 2*margin, screen_height - 200)
-        self.draw_shadow(self.screen, menu_rect)
-        self.draw_gradient_rect(self.screen, menu_rect, COLORS['panel'], COLORS['panel_light'])
-        pygame.draw.rect(self.screen, COLORS['panel'], menu_rect, border_radius=20)
-        pygame.draw.rect(self.screen, COLORS['accent'], menu_rect, 3, border_radius=20)
+        # Modern glass-morphism menu container
+        margin = 80
+        menu_width = min(screen_width - 2*margin, 800)
+        menu_height = screen_height - 240
+        menu_x = (screen_width - menu_width) // 2
+        menu_y = 180
+        menu_rect = pygame.Rect(menu_x, menu_y, menu_width, menu_height)
+        
+        # Glass-morphism effect
+        self.draw_glassmorphism_panel(self.screen, menu_rect)
         
         mouse_pos = pygame.mouse.get_pos()
         buttons = {}
         
+        # Get current settings
         if self.map_file and self.map_file in self.available_maps:
             map_idx = self.available_maps.index(self.map_file)
-            map_display = f"Map {map_idx}: {self.map_file.replace('.txt', '')}"
+            map_display = f"🗺️ Map {map_idx}: {self.map_file.replace('.txt', '').replace('_', ' ').title()}"
         else:
-            map_display = "Map 1: Default"
+            map_display = "🗺️ Map 1: Default"
         
+        # Enhanced options with icons and better formatting
         options = [
-            (map_display, "maps_prev", "maps_next"),
-            (f"Games per Match: {self.selected_games}", "games_prev", "games_next"),
-            (f"Player X: {self.selected_algo1}", "algo1_prev", "algo1_next"),
-            (f"Player O: {self.selected_algo2}", "algo2_prev", "algo2_next"),
-            (f"First Player: {'X (Red)' if self.first_player == 1 else 'O (Blue)'}", "first_player_prev", "first_player_next")
+            (map_display, "maps_prev", "maps_next", "🗺️"),
+            (f"🎯 Games per Match: {self.selected_games}", "games_prev", "games_next", "🎯"),
+            (f"🔴 Player X: {self.selected_algo1}", "algo1_prev", "algo1_next", "🔴"),
+            (f"🔵 Player O: {self.selected_algo2}", "algo2_prev", "algo2_next", "🔵"),
+            (f"🎲 First Player: {'X (Red)' if self.first_player == 1 else 'O (Blue)'}", 
+            "first_player_prev", "first_player_next", "🎲"),
+            (f"🏆 MCTS Tournament: {'✅ ON' if self.selected_use_tournament else '❌ OFF'}", 
+            "tournament_prev", "tournament_next", "🏆"),
+            (f"⚡ AB Transition: {self.selected_transition_threshold} moves", 
+            "threshold_prev", "threshold_next", "⚡")
         ]
         
-        y_start = menu_rect.y + 40
-        for i, (text, prev_key, next_key) in enumerate(options):
-            y_pos = y_start + i * 70
+        # Calculate option positioning
+        option_height = 70
+        total_options_height = len(options) * option_height
+        start_y = menu_y + (menu_height - total_options_height - 120) // 2  # 120 for start button
+        
+        for i, (text, prev_key, next_key, icon) in enumerate(options):
+            y_pos = start_y + i * option_height
             
-            option_rect = pygame.Rect(menu_rect.x + 20, y_pos - 10, menu_rect.width - 40, 50)
-            pygame.draw.rect(self.screen, (255, 255, 255, 10), option_rect, border_radius=10)
+            # Modern option card
+            option_rect = pygame.Rect(menu_x + 30, y_pos, menu_width - 60, 60)
             
-            text_surface = self.font.render(text, True, COLORS['text_dark'])
-            self.screen.blit(text_surface, (menu_rect.x + 40, y_pos))
+            # Hover effect
+            is_hovered = option_rect.collidepoint(mouse_pos)
+            if is_hovered:
+                self.draw_hover_card(self.screen, option_rect)
+            else:
+                self.draw_option_card(self.screen, option_rect)
             
+            # Icon and text
+            icon_font = pygame.font.SysFont('Segoe UI Emoji', 24)
+            icon_surface = icon_font.render(icon, True, COLORS['accent'])
+            self.screen.blit(icon_surface, (option_rect.x + 20, option_rect.y + 18))
+            
+            # Clean text without icon
+            clean_text = text.split(' ', 1)[1] if ' ' in text else text
+            text_surface = self.font.render(clean_text, True, COLORS['text'])
+            self.screen.blit(text_surface, (option_rect.x + 60, option_rect.y + 20))
+            
+            # Modern navigation buttons
             if prev_key and next_key:
-                button_y = y_pos - 5
-                prev_rect = pygame.Rect(menu_rect.right - 120, button_y, 45, 35)
-                next_rect = pygame.Rect(menu_rect.right - 65, button_y, 45, 35)
+                button_size = 45
+                button_y = option_rect.y + 7
                 
-                buttons[prev_key] = self.draw_modern_button(
-                    self.screen, prev_rect, "<", self.font, 
-                    COLORS['panel_light'], COLORS['accent'], COLORS['text'], mouse_pos
+                # Previous button
+                prev_rect = pygame.Rect(option_rect.right - 110, button_y, button_size, button_size)
+                buttons[prev_key] = self.draw_modern_nav_button(
+                    self.screen, prev_rect, "‹", mouse_pos, COLORS['panel_light']
                 )
-                buttons[next_key] = self.draw_modern_button(
-                    self.screen, next_rect, ">", self.font,
-                    COLORS['panel_light'], COLORS['accent'], COLORS['text'], mouse_pos
+                
+                # Next button
+                next_rect = pygame.Rect(option_rect.right - 55, button_y, button_size, button_size)
+                buttons[next_key] = self.draw_modern_nav_button(
+                    self.screen, next_rect, "›", mouse_pos, COLORS['panel_light']
                 )
         
-        start_rect = pygame.Rect(screen_width//2 - 100, menu_rect.bottom - 80, 200, 50)
-        buttons['start_button'] = self.draw_modern_button(
-            self.screen, start_rect, "START TOURNAMENT", self.font,
-            COLORS['success'], COLORS['accent'], COLORS['text'], mouse_pos
+        # Enhanced start button with gradient and animation
+        start_y = start_y + len(options) * option_height + 30
+        start_rect = pygame.Rect(menu_x + menu_width//2 - 150, start_y, 300, 60)
+        
+        # Pulsing effect for start button
+        pulse_scale = 1.0 + 0.1 * abs(pygame.time.get_ticks() % 2000 - 1000) / 1000
+        pulse_rect = pygame.Rect(
+            start_rect.centerx - start_rect.width * pulse_scale // 2,
+            start_rect.centery - start_rect.height * pulse_scale // 2,
+            start_rect.width * pulse_scale,
+            start_rect.height * pulse_scale
         )
+        
+        buttons['start_button'] = self.draw_enhanced_start_button(
+            self.screen, start_rect, "🚀 START TOURNAMENT", mouse_pos
+        )
+        
+        # Add version info and credits
+        version_text = "v2.0 | Enhanced UI"
+        version_surface = self.font_small.render(version_text, True, COLORS['text'])
+        version_rect = version_surface.get_rect(bottomright=(screen_width - 20, screen_height - 10))
+        self.screen.blit(version_surface, version_rect)
         
         pygame.display.flip()
         return buttons
+
+    def draw_glassmorphism_panel(self, surface, rect):
+        """Draw modern glass-morphism panel"""
+        # Background blur effect simulation
+        blur_surface = pygame.Surface((rect.width, rect.height))
+        blur_surface.set_alpha(60)
+        blur_surface.fill((255, 255, 255))
+        
+        # Main panel with rounded corners
+        self.draw_rounded_rect_advanced(surface, rect, COLORS['panel'], 25, alpha=180)
+        
+        # Glass reflection effect
+        reflection_rect = pygame.Rect(rect.x, rect.y, rect.width, rect.height // 3)
+        reflection_surface = pygame.Surface((reflection_rect.width, reflection_rect.height))
+        reflection_surface.set_alpha(30)
+        reflection_surface.fill((255, 255, 255))
+        surface.blit(reflection_surface, reflection_rect)
+        
+        # Border with gradient
+        pygame.draw.rect(surface, COLORS['accent'], rect, 3, border_radius=25)
+        
+        # Inner glow
+        inner_rect = pygame.Rect(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4)
+        pygame.draw.rect(surface, (*COLORS['accent'], 50), inner_rect, 1, border_radius=23)
+
+    def draw_option_card(self, surface, rect):
+        """Draw modern option card"""
+        # Shadow
+        shadow_rect = pygame.Rect(rect.x + 3, rect.y + 3, rect.width, rect.height)
+        shadow_surface = pygame.Surface((shadow_rect.width, shadow_rect.height))
+        shadow_surface.set_alpha(30)
+        shadow_surface.fill(COLORS['text_dark'])
+        surface.blit(shadow_surface, shadow_rect)
+        
+        # Main card
+        self.draw_rounded_rect_advanced(surface, rect, COLORS['panel_light'], 15, alpha=200)
+        
+        # Subtle border
+        pygame.draw.rect(surface, (*COLORS['grid'], 100), rect, 1, border_radius=15)
+
+    def draw_hover_card(self, surface, rect):
+        """Draw hovered option card with enhanced effects"""
+        # Enhanced shadow
+        shadow_rect = pygame.Rect(rect.x + 5, rect.y + 5, rect.width, rect.height)
+        shadow_surface = pygame.Surface((shadow_rect.width, shadow_rect.height))
+        shadow_surface.set_alpha(60)
+        shadow_surface.fill(COLORS['text_dark'])
+        surface.blit(shadow_surface, shadow_rect)
+        
+        # Highlighted card
+        hover_color = (COLORS['accent'][0], COLORS['accent'][1], COLORS['accent'][2])
+        self.draw_rounded_rect_advanced(surface, rect, hover_color, 15, alpha=150)
+        
+        # Glowing border
+        pygame.draw.rect(surface, COLORS['accent'], rect, 2, border_radius=15)
+        
+        # Inner highlight
+        inner_rect = pygame.Rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2)
+        pygame.draw.rect(surface, (*COLORS['success'], 30), inner_rect, 1, border_radius=14)
+
+    def draw_modern_nav_button(self, surface, rect, text, mouse_pos, base_color):
+        """Draw modern navigation button"""
+        is_hovered = rect.collidepoint(mouse_pos)
+        
+        # Button color with hover effect
+        if is_hovered:
+            color = COLORS['accent']
+            shadow_alpha = 80
+        else:
+            color = base_color
+            shadow_alpha = 40
+        
+        # Shadow
+        shadow_rect = pygame.Rect(rect.x + 2, rect.y + 2, rect.width, rect.height)
+        shadow_surface = pygame.Surface((shadow_rect.width, shadow_rect.height))
+        shadow_surface.set_alpha(shadow_alpha)
+        shadow_surface.fill(COLORS['text_dark'])
+        surface.blit(shadow_surface, shadow_rect)
+        
+        # Button background
+        pygame.draw.circle(surface, color, rect.center, rect.width // 2)
+        
+        # Button border
+        pygame.draw.circle(surface, COLORS['text'], rect.center, rect.width // 2, 2)
+        
+        # Button text
+        button_font = pygame.font.SysFont('Segoe UI', 20, bold=True)
+        text_surface = button_font.render(text, True, COLORS['text'])
+        text_rect = text_surface.get_rect(center=rect.center)
+        surface.blit(text_surface, text_rect)
+        
+        return rect
+
+    def draw_enhanced_start_button(self, surface, rect, text, mouse_pos):
+        """Draw enhanced start button with gradient and effects"""
+        is_hovered = rect.collidepoint(mouse_pos)
+        
+        # Enhanced shadow
+        shadow_rect = pygame.Rect(rect.x + 6, rect.y + 6, rect.width, rect.height)
+        shadow_surface = pygame.Surface((shadow_rect.width, shadow_rect.height))
+        shadow_surface.set_alpha(100 if is_hovered else 60)
+        shadow_surface.fill(COLORS['text_dark'])
+        surface.blit(shadow_surface, shadow_rect)
+        
+        # Gradient background
+        if is_hovered:
+            color1 = COLORS['success']
+            color2 = (COLORS['success'][0] + 30, COLORS['success'][1] + 30, COLORS['success'][2] + 30)
+        else:
+            color1 = COLORS['success']
+            color2 = (COLORS['success'][0] - 20, COLORS['success'][1] - 20, COLORS['success'][2] - 20)
+        
+        self.draw_gradient_rect(surface, rect, color1, color2, vertical=True)
+        
+        # Button border with glow effect
+        border_color = COLORS['text'] if not is_hovered else (255, 255, 255)
+        pygame.draw.rect(surface, border_color, rect, 3, border_radius=30)
+        
+        # Inner glow
+        if is_hovered:
+            inner_rect = pygame.Rect(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4)
+            pygame.draw.rect(surface, (*COLORS['text'], 50), inner_rect, 1, border_radius=28)
+        
+        # Button text with shadow
+        button_font = pygame.font.SysFont('Segoe UI', 18, bold=True)
+        
+        # Text shadow
+        text_shadow = button_font.render(text, True, COLORS['text_dark'])
+        shadow_rect = text_shadow.get_rect(center=(rect.centerx + 2, rect.centery + 2))
+        surface.blit(text_shadow, shadow_rect)
+        
+        # Main text
+        text_surface = button_font.render(text, True, COLORS['text'])
+        text_rect = text_surface.get_rect(center=rect.center)
+        surface.blit(text_surface, text_rect)
+        
+        return rect
+
+    def draw_rounded_rect_advanced(self, surface, rect, color, radius, alpha=255):
+        """Draw rounded rectangle with alpha support"""
+        if alpha < 255:
+            # Create surface with alpha
+            temp_surface = pygame.Surface((rect.width, rect.height))
+            temp_surface.set_alpha(alpha)
+            temp_surface.fill(color)
+            surface.blit(temp_surface, rect)
+        else:
+            pygame.draw.rect(surface, color, rect, border_radius=radius)
+
+    def draw_advanced_gradient(self, surface, rect, color1, color2, steps=50):
+        """Draw advanced gradient with more steps for smoother effect"""
+        for i in range(steps):
+            ratio = i / steps
+            r = int(color1[0] * (1 - ratio) + color2[0] * ratio)
+            g = int(color1[1] * (1 - ratio) + color2[1] * ratio)
+            b = int(color1[2] * (1 - ratio) + color2[2] * ratio)
+            
+            strip_height = rect.height // steps
+            strip_rect = pygame.Rect(rect.x, rect.y + i * strip_height, rect.width, strip_height + 1)
+            pygame.draw.rect(surface, (r, g, b), strip_rect)
+
+    def draw_text_glow(self, surface, text, font, color, pos, blur_radius=10):
+        """Draw text with glow effect"""
+        # Create multiple text surfaces with different alphas for glow
+        for i in range(blur_radius, 0, -2):
+            alpha = int(255 * (blur_radius - i) / blur_radius * 0.3)
+            glow_surface = font.render(text, True, (*color, alpha))
+            
+            # Draw glow in multiple positions around the text
+            for dx in range(-i, i+1, 2):
+                for dy in range(-i, i+1, 2):
+                    if dx*dx + dy*dy <= i*i:
+                        surface.blit(glow_surface, (pos[0] + dx, pos[1] + dy))
+
+    def draw_particles_background(self):
+        """Draw animated particles in background"""
+        if not hasattr(self, 'particles'):
+            self.particles = []
+            for _ in range(30):
+                self.particles.append({
+                    'x': np.random.randint(0, self.screen.get_width()),
+                    'y': np.random.randint(0, self.screen.get_height()),
+                    'vx': np.random.uniform(-0.5, 0.5),
+                    'vy': np.random.uniform(-0.5, 0.5),
+                    'size': np.random.randint(1, 4),
+                    'alpha': np.random.randint(30, 100)
+                })
+        
+        # Update and draw particles
+        screen_width, screen_height = self.screen.get_size()
+        for particle in self.particles:
+            # Update position
+            particle['x'] += particle['vx']
+            particle['y'] += particle['vy']
+            
+            # Wrap around screen
+            if particle['x'] < 0:
+                particle['x'] = screen_width
+            elif particle['x'] > screen_width:
+                particle['x'] = 0
+            if particle['y'] < 0:
+                particle['y'] = screen_height
+            elif particle['y'] > screen_height:
+                particle['y'] = 0
+            
+            # Draw particle
+            particle_surface = pygame.Surface((particle['size']*2, particle['size']*2))
+            particle_surface.set_alpha(particle['alpha'])
+            pygame.draw.circle(particle_surface, COLORS['accent'], 
+                            (particle['size'], particle['size']), particle['size'])
+            self.screen.blit(particle_surface, (particle['x'], particle['y']))
 
     async def run_menu(self):
         if self.display != 'pygame':
@@ -630,16 +922,53 @@ class AtaxxGame:
                         self.first_player = 1 if self.first_player == -1 else -1
                     elif 'first_player_next' in buttons and buttons['first_player_next'].collidepoint(pos):
                         self.first_player = -1 if self.first_player == 1 else 1
+                    elif 'tournament_prev' in buttons and buttons['tournament_prev'].collidepoint(pos):
+                        self.selected_use_tournament = not self.selected_use_tournament
+                    elif 'tournament_next' in buttons and buttons['tournament_next'].collidepoint(pos):
+                        self.selected_use_tournament = not self.selected_use_tournament
+                    elif 'threshold_prev' in buttons and buttons['threshold_prev'].collidepoint(pos):
+                        self.selected_transition_threshold = max(5, self.selected_transition_threshold - 1)
+                    elif 'threshold_next' in buttons and buttons['threshold_next'].collidepoint(pos):
+                        self.selected_transition_threshold = min(50, self.selected_transition_threshold + 1)
                     elif 'start_button' in buttons and buttons['start_button'].collidepoint(pos):
                         self.menu_active = False
                         self.games_per_match = self.selected_games
                         self.algo1 = self.selected_algo1
                         self.algo2 = self.selected_algo2
+                        self.use_tournament = self.selected_use_tournament
+                        self.transition_threshold = self.selected_transition_threshold
+                        
+                        # Recreate agents with new settings
+                        self.agents = {
+                            "Minimax+AB": MinimaxAgent(max_depth=4),
+                            "MCTS_300": MCTSAgent(iterations=self.iterations),
+                            "MCTS_Domain_300": MCTSDomainAgent(iterations=self.iterations, tournament=self.use_tournament),
+                            "MCTS_Domain_600": MCTSDomainAgent(iterations=max(self.iterations, 600), tournament=self.use_tournament),
+                            "AB+MCTS_Domain_600": ABMCTSDomainAgent(
+                                iterations=max(self.iterations, 600), 
+                                ab_depth=4, 
+                                transition_threshold=self.transition_threshold,
+                                tournament=self.use_tournament
+                            )
+                        }
+                        
                         self.results = {name: {"wins": 0, "losses": 0, "draws": 0, "avg_pieces": 0, "games_played": 0} 
                                         for name in [self.algo1, self.algo2]}
 
+            await asyncio.sleep(0.016)
+
     async def play_game(self, agent1_name, agent2_name, forward=True):
         self.state = AtaxxState(initial_board=self.initial_board, current_player=self.first_player)
+        
+        # Set current player names for display
+        if forward:
+            # Forward game: agent1 plays X (Red), agent2 plays O (Blue)
+            self.current_x_player = agent1_name
+            self.current_o_player = agent2_name
+        else:
+            # Reverse game: agent2 plays X (Red), agent1 plays O (Blue)
+            self.current_x_player = agent2_name
+            self.current_o_player = agent1_name
         
         if self.map_file and self.map_file in self.available_maps:
             map_idx = self.available_maps.index(self.map_file)
@@ -648,6 +977,8 @@ class AtaxxGame:
             map_name = "Map 1: Default"
             
         print(f"\nGame ({'Forward' if forward else 'Reverse'}) on {map_name}")
+        print(f"X (Red): {self.current_x_player} | O (Blue): {self.current_o_player}")
+        
         legal_moves = self.state.get_legal_moves()
         if not legal_moves:
             print(f"Warning: No initial legal moves for player {self.state.current_player}")
@@ -694,8 +1025,13 @@ class AtaxxGame:
                     break
                 continue
             
-            agent_name = agent1_name if (forward and self.state.current_player == 1) or (not forward and self.state.current_player == -1) else agent2_name
-            agent = self.agents[agent_name]
+            # Determine which agent should play based on current player and game direction
+            if self.state.current_player == 1:  # X player (Red)
+                current_agent_name = self.current_x_player
+            else:  # O player (Blue)
+                current_agent_name = self.current_o_player
+            
+            agent = self.agents[current_agent_name]
             move = agent.get_move(self.state)
 
             if not self.running or self.menu_active:
@@ -705,7 +1041,9 @@ class AtaxxGame:
                 r, c, nr, nc = move
                 is_clone = abs(r - nr) <= 1 and abs(c - nc) <= 1
                 move_type = "Clone" if is_clone else "Jump"
-                print(f"\nMove {move_count + 1}: {agent_name} moves from ({r},{c}) to ({nr},{nc}) ({move_type})")
+                player_symbol = "X" if self.state.current_player == 1 else "O"
+                print(f"\nMove {move_count + 1}: {current_agent_name} ({player_symbol}) moves from ({r},{c}) to ({nr},{nc}) ({move_type})")
+                
                 self.state.make_move(move)
                 move_count += 1
                 x_pieces = np.sum(self.state.board == 1)
@@ -713,12 +1051,31 @@ class AtaxxGame:
                 print(f"Pieces - X: {x_pieces}, O: {o_pieces}")
                 control_buttons = self.draw_board()
                 
+                # Only add sleep for pygame display, not terminal
                 if self.display == 'pygame':
-                    sleep_time = max(0.1, self.delay)
-                    sleep_steps = int(sleep_time / 0.1)
-                    for i in range(sleep_steps):
-                        await asyncio.sleep(0.1)
-                        
+                    await asyncio.sleep(2.0)  # 2 second sleep for each move
+                    
+                    # Handle events during sleep to maintain responsiveness
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            self.running = False
+                            return
+                        elif event.type == pygame.KEYDOWN:
+                            self.handle_keyboard_events(event)
+                        elif event.type == pygame.MOUSEBUTTONDOWN:
+                            if control_buttons:
+                                if 'pause' in control_buttons and control_buttons['pause'].collidepoint(event.pos):
+                                    self.toggle_pause()
+                                    control_buttons = self.draw_board()
+                                elif 'menu' in control_buttons and control_buttons['menu'].collidepoint(event.pos):
+                                    self.return_to_menu()
+                                    return
+                    
+                    if not self.running or self.menu_active:
+                        return
+                    
+                    # Handle pause state
+                    while self.paused and self.running and not self.menu_active:
                         for event in pygame.event.get():
                             if event.type == pygame.QUIT:
                                 self.running = False
@@ -733,35 +1090,17 @@ class AtaxxGame:
                                     elif 'menu' in control_buttons and control_buttons['menu'].collidepoint(event.pos):
                                         self.return_to_menu()
                                         return
-                        
-                        if not self.running or self.menu_active:
-                            return
-                        
-                        while self.paused and self.running and not self.menu_active:
-                            for event in pygame.event.get():
-                                if event.type == pygame.QUIT:
-                                    self.running = False
-                                    return
-                                elif event.type == pygame.KEYDOWN:
-                                    self.handle_keyboard_events(event)
-                                elif event.type == pygame.MOUSEBUTTONDOWN:
-                                    if control_buttons:
-                                        if 'pause' in control_buttons and control_buttons['pause'].collidepoint(event.pos):
-                                            self.toggle_pause()
-                                            control_buttons = self.draw_board()
-                                        elif 'menu' in control_buttons and control_buttons['menu'].collidepoint(event.pos):
-                                            self.return_to_menu()
-                                            return
-                            control_buttons = self.draw_board()
-                            await asyncio.sleep(0.1)
+                        control_buttons = self.draw_board()
+                        await asyncio.sleep(0.1)
             else:
-                print(f"\n{agent_name} has no legal moves - PASS")
+                print(f"\n{current_agent_name} has no legal moves - PASS")
                 self.state.current_player = -self.state.current_player
         
         if not self.running or self.menu_active:
             return
             
         winner = self.state.get_winner()
+        # Use the correct agent names for results based on final board state
         p1_name = agent1_name if forward else agent2_name
         p2_name = agent2_name if forward else agent1_name
         self.results[p1_name]["avg_pieces"] += x_pieces
@@ -769,21 +1108,27 @@ class AtaxxGame:
         self.results[p1_name]["games_played"] += 1
         self.results[p2_name]["games_played"] += 1
         
-        if winner == 1:
+        if winner == 1:  # X wins
+            winner_name = self.current_x_player
+            loser_name = self.current_o_player
             self.results[p1_name]["wins"] += 1
             self.results[p2_name]["losses"] += 1
-            print(f"Winner: {p1_name} (X)")
-        elif winner == -1:
+            print(f"Winner: {winner_name} (X)")
+        elif winner == -1:  # O wins
+            winner_name = self.current_o_player
+            loser_name = self.current_x_player
             self.results[p1_name]["losses"] += 1
             self.results[p2_name]["wins"] += 1
-            print(f"Winner: {p2_name} (O)")
+            print(f"Winner: {winner_name} (O)")
         else:
             self.results[p1_name]["draws"] += 1
             self.results[p2_name]["draws"] += 1
             print("Draw")
         
         if self.display == 'pygame' and self.running and not self.menu_active:
-            self.draw_game_result(winner, p1_name, p2_name)
+            # Pass the actual winner name for display
+            winner_display_name = winner_name if winner != 0 else None
+            self.draw_game_result(winner, winner_display_name, loser_name if winner != 0 else None)
             for i in range(20):  
                 await asyncio.sleep(0.1)
                 for event in pygame.event.get():
@@ -795,7 +1140,7 @@ class AtaxxGame:
                 if not self.running or self.menu_active:
                     return
 
-    def draw_game_result(self, winner, p1_name, p2_name):
+    def draw_game_result(self, winner, winner_name=None, loser_name=None):
         screen_width, screen_height = self.screen.get_size()
         
         overlay = pygame.Surface((screen_width, screen_height))
@@ -815,11 +1160,13 @@ class AtaxxGame:
         if winner == 0:
             result_text = "DRAW!"
             color = COLORS['warning']
-        elif winner == 1:
-            result_text = f"{p1_name} WINS!"
-            color = COLORS['success']
         else:
-            result_text = f"{p2_name} WINS!"
+            # Show the actual agent name that won
+            if winner_name:
+                player_symbol = "X" if winner == 1 else "O"
+                result_text = f"{winner_name} ({player_symbol}) WINS!"
+            else:
+                result_text = f"Player {'X' if winner == 1 else 'O'} WINS!"
             color = COLORS['success']
         
         text_surface = self.font_large.render(result_text, True, color)
@@ -907,6 +1254,7 @@ class AtaxxGame:
             return new_df
 
     async def run_tournament(self):
+        """Run tournament with enhanced results screen"""
         while self.running:
             await self.run_menu()
             if not self.running:
@@ -944,16 +1292,26 @@ class AtaxxGame:
             
             if self.display == 'pygame':
                 if self.running and not self.menu_active:
-                    self.draw_final_results()
-                while self.running and not self.menu_active:
-                    for event in pygame.event.get():
-                        if event.type == pygame.QUIT:
-                            self.running = False
-                            break
-                        elif event.type == pygame.KEYDOWN:
-                            self.handle_keyboard_events(event)
-                    await asyncio.sleep(0.1)
+                    # Show results screen with interactive buttons
+                    results_active = True
+                    while results_active and self.running and not self.menu_active:
+                        buttons = self.draw_final_results()
+                        
+                        for event in pygame.event.get():
+                            if event.type == pygame.QUIT:
+                                self.running = False
+                                results_active = False
+                                break
+                            
+                            # Handle results screen events
+                            action_taken = self.handle_results_screen_events(event, buttons)
+                            if action_taken:
+                                results_active = False
+                                break
+                        
+                        await asyncio.sleep(0.016)  # 60 FPS
             else:
+                # Terminal mode - print results
                 for name in self.results:
                     if self.results[name]["games_played"] > 0:
                         self.results[name]["avg_pieces"] /= self.results[name]["games_played"]
@@ -963,13 +1321,19 @@ class AtaxxGame:
             
             if self.running and not self.menu_active:
                 self.save_results()
-                break
+                # In terminal mode, continue to show menu for new tournament
+                if self.display == 'terminal':
+                    continue
+                else:
+                    # In pygame mode, the loop will continue based on user action
+                    continue
 
     def draw_final_results(self):
+        """Draw final tournament results with return to menu button"""
         screen_width, screen_height = self.screen.get_size()
         
         self.draw_gradient_rect(self.screen, pygame.Rect(0, 0, screen_width, screen_height),
-                               COLORS['bg'], (COLORS['bg'][0]+10, COLORS['bg'][1]+10, COLORS['bg'][2]+10))
+                            COLORS['bg'], (COLORS['bg'][0]+10, COLORS['bg'][1]+10, COLORS['bg'][2]+10))
         
         margin = 50
         result_rect = pygame.Rect(margin, margin, screen_width - 2*margin, screen_height - 2*margin)
@@ -978,12 +1342,17 @@ class AtaxxGame:
         pygame.draw.rect(self.screen, COLORS['panel'], result_rect, border_radius=20)
         pygame.draw.rect(self.screen, COLORS['accent'], result_rect, 4, border_radius=20)
         
+        # Title
         title = self.font_large.render("Tournament Results", True, COLORS['text'])
         title_rect = title.get_rect(center=(screen_width//2, result_rect.y + 50))
         self.screen.blit(title, title_rect)
         
+        # Mouse position for button hover effects
+        mouse_pos = pygame.mouse.get_pos()
+        
         y_offset = result_rect.y + 120
         
+        # Display results for each agent
         for name in self.results:
             if self.results[name]["games_played"] > 0:
                 avg_pieces = self.results[name]['avg_pieces'] / self.results[name]['games_played']
@@ -991,16 +1360,20 @@ class AtaxxGame:
                 losses = self.results[name]['losses']
                 draws = self.results[name]['draws']
                 
+                # Agent result card
                 agent_rect = pygame.Rect(result_rect.x + 30, y_offset - 10, result_rect.width - 60, 80)
                 pygame.draw.rect(self.screen, (255, 255, 255, 20), agent_rect, border_radius=12)
                 
+                # Agent name
                 agent_text = self.font_large.render(name, True, COLORS['text'])
                 self.screen.blit(agent_text, (agent_rect.x + 20, y_offset))
                 
+                # Stats
                 stats_text = f"{wins}W  {losses}L  {draws}D  {avg_pieces:.1f} avg pieces"
                 stats_surface = self.font.render(stats_text, True, COLORS['text'])
                 self.screen.blit(stats_surface, (agent_rect.x + 20, y_offset + 35))
                 
+                # Win rate bar
                 total_games = wins + losses + draws
                 if total_games > 0:
                     win_rate = wins / total_games
@@ -1012,10 +1385,135 @@ class AtaxxGame:
                         fill_rect = pygame.Rect(agent_rect.x + 20, y_offset + 60, fill_width, 8)
                         color = COLORS['success'] if win_rate > 0.5 else COLORS['warning'] if win_rate == 0.5 else COLORS['player_x']
                         pygame.draw.rect(self.screen, color, fill_rect, border_radius=4)
+                    
+                    # Win rate percentage
+                    win_rate_text = f"{win_rate*100:.1f}%"
+                    win_rate_surface = self.font_small.render(win_rate_text, True, COLORS['text'])
+                    self.screen.blit(win_rate_surface, (agent_rect.x + bar_width + 35, y_offset + 55))
                 
                 y_offset += 120
         
+        # Control buttons at bottom
+        button_y = result_rect.bottom - 80
+        button_width = 200
+        button_height = 50
+        
+        # Return to Menu button
+        menu_button_x = screen_width//2 - button_width - 10
+        menu_rect = pygame.Rect(menu_button_x, button_y, button_width, button_height)
+        
+        # New Tournament button  
+        new_button_x = screen_width//2 + 10
+        new_rect = pygame.Rect(new_button_x, button_y, button_width, button_height)
+        
+        # Draw buttons with hover effects
+        menu_button = self.draw_enhanced_result_button(
+            self.screen, menu_rect, "🏠 RETURN TO MENU", mouse_pos, COLORS['accent']
+        )
+        
+        new_button = self.draw_enhanced_result_button(
+            self.screen, new_rect, "🔄 NEW TOURNAMENT", mouse_pos, COLORS['success']
+        )
+        
+        # Instructions
+        instruction_text = "Press ESC to return to menu, SPACE for new tournament"
+        instruction_surface = self.font_small.render(instruction_text, True, COLORS['text'])
+        instruction_rect = instruction_surface.get_rect(center=(screen_width//2, button_y - 30))
+        self.screen.blit(instruction_surface, instruction_rect)
+        
         pygame.display.flip()
+        
+        return {'menu_button': menu_button, 'new_button': new_button}
+
+    def draw_enhanced_result_button(self, surface, rect, text, mouse_pos, base_color):
+        """Draw enhanced button for results screen"""
+        is_hovered = rect.collidepoint(mouse_pos)
+        
+        # Enhanced shadow with hover effect
+        shadow_offset = 8 if is_hovered else 5
+        shadow_rect = pygame.Rect(rect.x + shadow_offset, rect.y + shadow_offset, rect.width, rect.height)
+        shadow_surface = pygame.Surface((shadow_rect.width, shadow_rect.height))
+        shadow_surface.set_alpha(120 if is_hovered else 80)
+        shadow_surface.fill(COLORS['text_dark'])
+        surface.blit(shadow_surface, shadow_rect)
+        
+        # Button gradient with hover effect
+        if is_hovered:
+            color1 = tuple(min(255, c + 40) for c in base_color)
+            color2 = base_color
+            scale = 1.02
+        else:
+            color1 = base_color
+            color2 = tuple(max(0, c - 30) for c in base_color)
+            scale = 1.0
+        
+        # Scale effect on hover
+        if is_hovered:
+            scaled_rect = pygame.Rect(
+                rect.centerx - rect.width * scale // 2,
+                rect.centery - rect.height * scale // 2,
+                rect.width * scale,
+                rect.height * scale
+            )
+        else:
+            scaled_rect = rect
+        
+        # Draw gradient background
+        self.draw_gradient_rect(surface, scaled_rect, color1, color2, vertical=True)
+        
+        # Border with glow effect
+        border_color = (255, 255, 255) if is_hovered else COLORS['text']
+        border_width = 3 if is_hovered else 2
+        pygame.draw.rect(surface, border_color, scaled_rect, border_width, border_radius=25)
+        
+        # Inner glow for hover
+        if is_hovered:
+            inner_rect = pygame.Rect(
+                scaled_rect.x + 2, scaled_rect.y + 2, 
+                scaled_rect.width - 4, scaled_rect.height - 4
+            )
+            pygame.draw.rect(surface, (*COLORS['text'], 60), inner_rect, 1, border_radius=23)
+        
+        # Button text with shadow
+        button_font = pygame.font.SysFont('Segoe UI', 16, bold=True)
+        
+        # Text shadow
+        text_shadow = button_font.render(text, True, COLORS['text_dark'])
+        shadow_text_rect = text_shadow.get_rect(center=(scaled_rect.centerx + 2, scaled_rect.centery + 2))
+        surface.blit(text_shadow, shadow_text_rect)
+        
+        # Main text
+        text_surface = button_font.render(text, True, COLORS['text'])
+        text_rect = text_surface.get_rect(center=scaled_rect.center)
+        surface.blit(text_surface, text_rect)
+        
+        return rect
+
+    def handle_results_screen_events(self, event, buttons):
+        """Handle events on results screen"""
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            pos = event.pos
+            if 'menu_button' in buttons and buttons['menu_button'].collidepoint(pos):
+                self.return_to_menu()
+                return True
+            elif 'new_button' in buttons and buttons['new_button'].collidepoint(pos):
+                # Reset results and start new tournament
+                self.results = {name: {"wins": 0, "losses": 0, "draws": 0, "avg_pieces": 0, "games_played": 0} 
+                            for name in [self.algo1, self.algo2]}
+                return True
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.return_to_menu()
+                return True
+            elif event.key == pygame.K_SPACE:
+                # Reset results and start new tournament  
+                self.results = {name: {"wins": 0, "losses": 0, "draws": 0, "avg_pieces": 0, "games_played": 0} 
+                            for name in [self.algo1, self.algo2]}
+                return True
+            elif event.key == pygame.K_F11:
+                self.toggle_fullscreen()
+        
+        return False
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Ataxx Tournament with Pygame or Terminal")
@@ -1027,6 +1525,8 @@ def parse_args():
     parser.add_argument("--display", type=str, default="terminal", help="Display mode: pygame or terminal")
     parser.add_argument("--delay", type=float, default=0.5, help="Delay per move (seconds)")
     parser.add_argument("--first_player", type=str, default="W", help="First player (White or Black)")
+    parser.add_argument("--use_tournament", type=bool, default=False, help="Use tournament selection for MCTS Domain")
+    parser.add_argument("--transition_threshold", type=int, default=13, help="Transition threshold for AB+MCTS Domain")
     return parser.parse_args()
 
 async def main():
@@ -1040,7 +1540,9 @@ async def main():
             algo2=args.algo2,
             display=args.display,
             delay=args.delay,
-            first_player=args.first_player
+            first_player=args.first_player,
+            use_tournament=args.use_tournament,
+            transition_threshold=args.transition_threshold
         )
         game.init_pygame()
         await game.run_tournament()
